@@ -61,11 +61,14 @@ class Game:
         self.review_speeds = [0.2, 0.1, 0.05, 0.02]
         self.review_speed_labels = ["0.5x", "1x", "2x", "MAX"]
         self.review_speed_idx = 1
+        self.notif = NotificationManager()
 
         # Timers
         self._second_timer = 0.0
         self._ai_timer = 0.0
         self._ai_speed = 0.8  # seconds per AI step
+
+        self.shake_timer = 0.0
 
         self.running = True
 
@@ -101,6 +104,7 @@ class Game:
         self._second_timer = 0.0
         self._ai_timer = 0.0
 
+
         # AI speed from difficulty config
         ai_speed_ms = DIFFICULTY_CONFIG[difficulty]["ai_speed_ms"]
         self._ai_speed = ai_speed_ms / 1000.0
@@ -121,6 +125,9 @@ class Game:
                 self.hud.add_log(format_time(self.elapsed),
                                  event.get("log", ""),
                                  event.get("log_type", "system"))
+                
+            if event["type"] == "penalty" and event.get("log_type") != "ai":
+                self.shake_timer = 0.3  # seconds to shake screen
 
             if event["type"] == "finish":
                 self._check_game_over()
@@ -242,6 +249,9 @@ class Game:
         """Update game logic each frame."""
         self.notif.update(dt)
 
+        if self.shake_timer > 0:
+            self.shake_timer -= dt
+
         if self.state == self.REVIEW:
             if not getattr(self, 'review_paused', True):
                 self.review_anim_timer += dt
@@ -286,6 +296,8 @@ class Game:
             if self.final_countdown_timer >= 2.0:
                 self._end_game()
 
+        self.notif.update(dt)          
+
     def render(self):
         """Render the current screen."""
         dt = self.clock.get_time() / 1000.0
@@ -310,6 +322,7 @@ class Game:
         self.notif.render(self.screen)
 
         pygame.display.flip()
+        
 
     def _render_game(self):
         """Render the gameplay screen with only human grid visible."""
@@ -322,6 +335,25 @@ class Game:
         start_x = (WINDOW_WIDTH - GRID_PX) // 2
         grid_y = 90
 
+        shake_x, shake_y = 0, 0
+        if self.shake_timer > 0:
+            import random
+            intensity = int(self.shake_timer * 25) # More time = bigger shake
+            shake_x = random.randint(-intensity, intensity)
+            shake_y = random.randint(-intensity, intensity)
+
+        # Apply the shake offset to the render coordinates
+            render_x = start_x + shake_x
+            render_y = grid_y + shake_y
+
+        if self.shake_timer > 0:
+            # Create a surface that supports transparency (SRCALPHA)
+            flash_surf = pygame.Surface((GRID_PX, GRID_PX), pygame.SRCALPHA)
+            # Calculate alpha (transparency) so it fades out smoothly
+            alpha = int((self.shake_timer / 0.3) * 200) 
+            flash_surf.fill((*Colors.RED, alpha)) 
+            # Draw it exactly over the shaking grid
+            self.screen.blit(flash_surf, (render_x, render_y))
         try:
             label_font = pygame.font.SysFont("segoeuisymbol", 16, bold=True)
         except Exception:
