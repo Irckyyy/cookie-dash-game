@@ -1,7 +1,7 @@
 """
 ui/screens.py — Title, Difficulty Select, and End/Results screens.
 Translated from the HTML screen divs and their associated UI logic.
-All rendering done with Pygame primitives and system fonts.
+Now uses pixel-art background assets for panels, buttons, and cards.
 """
 
 import pygame
@@ -9,6 +9,7 @@ from setting import (
     Colors, WINDOW_WIDTH, WINDOW_HEIGHT,
     Difficulty, DIFFICULTY_CONFIG,
 )
+from ui.assets import assets
 
 
 class ScreenManager:
@@ -39,6 +40,9 @@ class ScreenManager:
         self._cookie_bob = 0
         self._cookie_dir = 1
 
+        # Sky background cache
+        self._sky_surface = None
+
     def _init_fonts(self):
         try:
             self._big_font = pygame.font.SysFont("segoeuisymbol", 72)
@@ -57,8 +61,36 @@ class ScreenManager:
             self._emoji_big = pygame.font.Font(None, 58)
             self._stat_font = pygame.font.Font(None, 26)
 
+    def _draw_sky_background(self, surface: pygame.Surface):
+        """Draw the pixel-art sky background (Frame 1), scaled to fill the window."""
+        sky = assets.bg_sky
+        if sky is None:
+            surface.fill(Colors.NIGHT)
+            self._draw_stars(surface)
+            return
+
+        # Scale Frame 1 to fill the full window
+        if self._sky_surface is None or self._sky_surface.get_size() != (WINDOW_WIDTH, WINDOW_HEIGHT):
+            self._sky_surface = pygame.transform.smoothscale(sky, (WINDOW_WIDTH, WINDOW_HEIGHT))
+
+        surface.blit(self._sky_surface, (0, 0))
+
+    def _draw_sprite_button(self, surface: pygame.Surface, btn_name: str,
+                             rect: pygame.Rect) -> pygame.Rect:
+        """Draw a button using the sprite asset, scaled to fit the given rect.
+        Returns the actual rect used for hit testing."""
+        btn_img = assets.get_button(btn_name)
+        if btn_img:
+            scaled = pygame.transform.smoothscale(btn_img, (rect.width, rect.height))
+            surface.blit(scaled, rect)
+            return rect
+        else:
+            # Fallback to text button
+            self._draw_button(surface, rect, btn_name.replace("_", " ").title())
+            return rect
+
     def _draw_button(self, surface, rect, text, primary=True, hover_rect=None):
-        """Draw a styled button."""
+        """Draw a styled button (fallback when no sprite)."""
         if primary:
             bg = Colors.GOLD
             fg = (26, 10, 0)
@@ -78,47 +110,63 @@ class ScreenManager:
         text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)
 
+    # ==================== BROWN PANEL HELPER ====================
+    def _draw_brown_panel(self, surface: pygame.Surface, rect: pygame.Rect):
+        """Draw a brown panel with gold border matching the mockup style."""
+        # Brown fill
+        pygame.draw.rect(surface, (101, 67, 33), rect, border_radius=12)
+        # Gold border (outer)
+        pygame.draw.rect(surface, Colors.GOLD, rect, width=4, border_radius=12)
+        # Inner dark brown border for depth
+        inner = rect.inflate(-10, -10)
+        pygame.draw.rect(surface, (82, 54, 27), inner, width=2, border_radius=8)
+
     # ==================== TITLE SCREEN ====================
     def render_title(self, surface: pygame.Surface, dt: float):
-        """Draw the title screen."""
-        surface.fill(Colors.NIGHT)
-        self._draw_stars(surface)
+        """Draw the title screen with Frame 1 background and brown panel."""
+        self._draw_sky_background(surface)
 
         cx = WINDOW_WIDTH // 2
         cy = WINDOW_HEIGHT // 2
+
+        # Draw brown panel
+        panel_w, panel_h = 520, 380
+        panel_rect = pygame.Rect(cx - panel_w // 2, cy - panel_h // 2 - 10, panel_w, panel_h)
+        self._draw_brown_panel(surface, panel_rect)
 
         # Floating cookie animation
         self._cookie_bob += dt * 2.0 * self._cookie_dir
         if abs(self._cookie_bob) > 12:
             self._cookie_dir *= -1
 
-        cookie = self._big_font.render("🍪", True, Colors.GOLD)
-        cookie_rect = cookie.get_rect(centerx=cx,
-                                       centery=cy - 140 + int(self._cookie_bob))
-        surface.blit(cookie, cookie_rect)
+        cookie_sprite = assets.get_scaled("cookie", (80, 80))
+        if cookie_sprite:
+            cookie_rect = cookie_sprite.get_rect(centerx=cx,
+                                                  centery=panel_rect.top + 60 + int(self._cookie_bob))
+            surface.blit(cookie_sprite, cookie_rect)
 
-        # Title
-        title1 = self._title_font.render("Girl Scout Cookie", True, Colors.GOLD)
-        title2 = self._title_font.render("Night Delivery Dash", True, Colors.GOLD)
-        surface.blit(title1, title1.get_rect(centerx=cx, centery=cy - 60))
-        surface.blit(title2, title2.get_rect(centerx=cx, centery=cy - 15))
+        title1 = self._title_font.render("Cookie Delivery", True, Colors.GOLD)
+        title2 = self._title_font.render("Dash", True, Colors.GOLD)
+        surface.blit(title1, title1.get_rect(centerx=cx, centery=panel_rect.top + 120))
+        surface.blit(title2, title2.get_rect(centerx=cx, centery=panel_rect.top + 165))
 
         # Subtitle
-        sub = self._sub_font.render("INTRO TO AI · CASE STUDY 1", True, Colors.MUTED)
-        surface.blit(sub, sub.get_rect(centerx=cx, centery=cy + 25))
+        sub = self._sub_font.render("INTRO TO AI · CASE STUDY 1", True, (210, 190, 150))
+        surface.blit(sub, sub.get_rect(centerx=cx, centery=panel_rect.top + 230))
 
-        # Start button
-        self._start_rect = pygame.Rect(cx - 90, cy + 60, 180, 48)
-        self._draw_button(surface, self._start_rect, "▶  Start Game")
+        # Play Game button (sprite)
+        btn_w, btn_h = 220, 52
+        self._start_rect = pygame.Rect(cx - btn_w // 2, panel_rect.top + 255, btn_w, btn_h)
+        self._draw_sprite_button(surface, "play_game", self._start_rect)
 
-        # Description
+        # Description text
         desc_lines = [
-            "Deliver cookies to 3 houses and exit the village before the AI!",
-            "Navigate with arrow keys or WASD.",
+            "Deliver cookies to 3 houses and exit the village",
+            "before the AI! Navigate with arrow keys.",
         ]
         for i, line in enumerate(desc_lines):
-            desc = self._small_font.render(line, True, Colors.MUTED)
-            surface.blit(desc, desc.get_rect(centerx=cx, centery=cy + 130 + i * 20))
+            desc = self._small_font.render(line, True, (210, 190, 150))
+            surface.blit(desc, desc.get_rect(centerx=cx, centery=panel_rect.top + 325 + i * 18))
 
     def handle_title_click(self, pos: tuple) -> str:
         """Handle click on title screen. Returns next screen or None."""
@@ -128,73 +176,76 @@ class ScreenManager:
 
     # ==================== DIFFICULTY SCREEN ====================
     def render_difficulty(self, surface: pygame.Surface):
-        """Draw the difficulty selection screen."""
-        surface.fill(Colors.NIGHT)
-        self._draw_stars(surface)
+        """Draw the difficulty selection screen with Frame 1 background and brown panel."""
+        self._draw_sky_background(surface)
 
         cx = WINDOW_WIDTH // 2
         cy = WINDOW_HEIGHT // 2
 
-        # Title
-        title = self._title_font.render("Choose Difficulty", True, Colors.GOLD)
-        surface.blit(title, title.get_rect(centerx=cx, centery=cy - 180))
+        # Draw brown panel
+        panel_w, panel_h = 700, 380
+        panel_rect = pygame.Rect(cx - panel_w // 2, cy - panel_h // 2 - 20, panel_w, panel_h)
+        self._draw_brown_panel(surface, panel_rect)
 
-        sub = self._sub_font.render("Affects your flashlight range and AI behavior",
-                                     True, Colors.MUTED)
-        surface.blit(sub, sub.get_rect(centerx=cx, centery=cy - 145))
+        # Title text
+        title = self._title_font.render("SELECT DIFFICULTY", True, Colors.GOLD)
+        surface.blit(title, title.get_rect(centerx=cx, centery=panel_rect.top + 40))
 
-        # Difficulty cards
-        card_w, card_h = 200, 160
-        gap = 20
+        # Difficulty cards using mode_card sprites
+        card_w, card_h = 180, 170
+        gap = 16
         total_w = 3 * card_w + 2 * gap
         start_x = cx - total_w // 2
+        card_y = cy - 65
 
         self._diff_rects.clear()
         for i, diff_key in enumerate([Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]):
             cfg = DIFFICULTY_CONFIG[diff_key]
             card_x = start_x + i * (card_w + gap)
-            card_y = cy - 80
             card_rect = pygame.Rect(card_x, card_y, card_w, card_h)
             self._diff_rects[diff_key] = card_rect
 
-            # Card background
+            # Draw mode card sprite
+            mode_card = assets.get_mode_card(i)
+            if mode_card:
+                scaled_card = pygame.transform.smoothscale(mode_card, (card_w, card_h))
+                surface.blit(scaled_card, card_rect)
+            else:
+                # Fallback
+                is_selected = (diff_key == self.selected_difficulty)
+                bg = (40, 38, 20) if is_selected else Colors.CARD
+                border = Colors.GOLD if is_selected else Colors.BORDER
+                pygame.draw.rect(surface, bg, card_rect, border_radius=16)
+                pygame.draw.rect(surface, border, card_rect, width=2, border_radius=16)
+
+                icon = self._big_font.render(cfg["icon"], True, Colors.TEXT)
+                surface.blit(icon, icon.get_rect(centerx=card_rect.centerx, centery=card_rect.top + 40))
+
+                name = self._btn_font.render(cfg["name"], True, Colors.GOLD)
+                surface.blit(name, name.get_rect(centerx=card_rect.centerx, centery=card_rect.top + 85))
+
+                for j, line in enumerate(cfg["desc"].split("\n")):
+                    desc = self._small_font.render(line, True, Colors.MUTED)
+                    surface.blit(desc, desc.get_rect(centerx=card_rect.centerx, centery=card_rect.top + 115 + j * 16))
+
+            # Selection highlight border
             is_selected = (diff_key == self.selected_difficulty)
             if is_selected:
-                bg = (40, 38, 20)  # gold tint
-                border = Colors.GOLD
-            else:
-                bg = Colors.CARD
-                border = Colors.BORDER
+                highlight_rect = card_rect.inflate(6, 6)
+                pygame.draw.rect(surface, Colors.GOLD, highlight_rect, width=3, border_radius=10)
 
-            pygame.draw.rect(surface, bg, card_rect, border_radius=16)
-            pygame.draw.rect(surface, border, card_rect, width=2, border_radius=16)
+        # Buttons: Back and Start
+        btn_w, btn_h = 160, 48
+        btn_y = cy + 130
+        btn_gap = 30
 
-            # Icon
-            icon = self._big_font.render(cfg["icon"], True, Colors.TEXT)
-            icon_rect = icon.get_rect(centerx=card_rect.centerx,
-                                       centery=card_rect.top + 40)
-            surface.blit(icon, icon_rect)
+        # Back button
+        self._back_rect = pygame.Rect(cx - btn_w - btn_gap // 2, btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "back", self._back_rect)
 
-            # Name
-            name = self._btn_font.render(cfg["name"], True, Colors.GOLD)
-            name_rect = name.get_rect(centerx=card_rect.centerx,
-                                       centery=card_rect.top + 85)
-            surface.blit(name, name_rect)
-
-            # Description lines
-            desc_lines = cfg["desc"].split("\n")
-            for j, line in enumerate(desc_lines):
-                desc = self._small_font.render(line, True, Colors.MUTED)
-                desc_rect = desc.get_rect(centerx=card_rect.centerx,
-                                           centery=card_rect.top + 115 + j * 16)
-                surface.blit(desc, desc_rect)
-
-        # Buttons
-        btn_y = cy + 120
-        self._back_rect = pygame.Rect(cx - 170, btn_y, 140, 42)
-        self._play_rect = pygame.Rect(cx + 30, btn_y, 140, 42)
-        self._draw_button(surface, self._back_rect, "← Back", primary=False)
-        self._draw_button(surface, self._play_rect, "Play!")
+        # Start button
+        self._play_rect = pygame.Rect(cx + btn_gap // 2, btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "start", self._play_rect)
 
     def handle_difficulty_click(self, pos: tuple) -> str:
         """Handle click on difficulty screen. Returns 'game', 'title', or None."""
@@ -212,70 +263,78 @@ class ScreenManager:
 
     # ==================== END SCREEN ====================
     def render_end(self, surface: pygame.Surface, results: dict):
-        """Draw the end/results screen with algorithm description."""
-        surface.fill(Colors.NIGHT)
-        self._draw_stars(surface)
+        """Draw the end/results screen with Frame 1 background and brown panel."""
+        self._draw_sky_background(surface)
 
         cx = WINDOW_WIDTH // 2
 
-        # Result card background
-        card_w, card_h = 520, 470
-        card_rect = pygame.Rect(cx - card_w // 2, 30, card_w, card_h)
-        pygame.draw.rect(surface, Colors.CARD, card_rect, border_radius=20)
-        pygame.draw.rect(surface, Colors.BORDER, card_rect, width=1, border_radius=20)
+        # Draw brown panel (expanded)
+        panel_w, panel_h = 580, 460
+        panel_rect = pygame.Rect(cx - panel_w // 2, 40, panel_w, panel_h)
+        self._draw_brown_panel(surface, panel_rect)
 
-        # Winner badge
-        badge = self._emoji_big.render(results.get("winner_badge", "🏆"),
-                                        True, Colors.GOLD)
-        surface.blit(badge, badge.get_rect(centerx=cx, centery=card_rect.top + 45))
+        # Winner icon (use icon sprites)
+        winner_text = results.get("winner_text", "Game Over")
+        if "You" in winner_text:
+            winner_icon = assets.get_icon("human")
+        else:
+            winner_icon = assets.get_icon("robot")
+
+        if winner_icon:
+            icon_size = 70
+            scaled_icon = pygame.transform.smoothscale(winner_icon, (icon_size, icon_size))
+            icon_rect = scaled_icon.get_rect(centerx=cx, centery=panel_rect.top + 55)
+            surface.blit(scaled_icon, icon_rect)
 
         # Winner text
-        winner = self._title_font.render(results.get("winner_text", "Game Over"),
-                                          True, Colors.GOLD)
-        surface.blit(winner, winner.get_rect(centerx=cx, centery=card_rect.top + 92))
+        winner = self._title_font.render(winner_text, True, Colors.GOLD)
+        surface.blit(winner, winner.get_rect(centerx=cx, centery=panel_rect.top + 110))
 
-        # Stats grid (2 columns × 3 rows)
+        # Stats grid (2 columns × 3 rows) — symmetric layout
         stats = [
-            ("Your Score", str(results.get("human_score", 0)), Colors.BLUE),
-            ("AI Score", str(results.get("ai_score", 0)), Colors.PURPLE),
-            ("Your PI", str(results.get("human_pi", "0")), Colors.BLUE),
+            ("YOUR SCORE", str(results.get("human_score", 0)), Colors.BLUE),
+            ("AI SCORE", str(results.get("ai_score", 0)), Colors.PURPLE),
+            ("YOUR PI", str(results.get("human_pi", "0")), Colors.BLUE),
             ("AI PI", str(results.get("ai_pi", "0")), Colors.PURPLE),
-            ("Your Time", results.get("human_time", "0:00"), Colors.BLUE),
-            ("AI Time", results.get("ai_time", "0:00"), Colors.PURPLE),
+            ("YOUR TIME", results.get("human_time", "0:00"), Colors.BLUE),
+            ("AI TIME", results.get("ai_time", "0:00"), Colors.PURPLE),
         ]
 
-        stat_w = (card_w - 60) // 2
-        stat_h = 50
-        stat_gap = 8
-        stat_start_y = card_rect.top + 125
+        padding = 30          # padding from panel edges
+        col_gap = 12          # gap between columns
+        stat_h = 55
+        row_gap = 10
+        stat_w = (panel_w - 2 * padding - col_gap) // 2
+        stat_start_y = panel_rect.top + 145
 
         for idx, (label, value, color) in enumerate(stats):
             col = idx % 2
             row = idx // 2
-            sx = card_rect.left + 20 + col * (stat_w + stat_gap + 10)
-            sy = stat_start_y + row * (stat_h + stat_gap)
+            sx = panel_rect.left + padding + col * (stat_w + col_gap)
+            sy = stat_start_y + row * (stat_h + row_gap)
             stat_rect = pygame.Rect(sx, sy, stat_w, stat_h)
 
             pygame.draw.rect(surface, Colors.DEEP, stat_rect, border_radius=10)
+            pygame.draw.rect(surface, Colors.BORDER, stat_rect, width=1, border_radius=10)
 
             # Label
-            lbl = self._small_font.render(label.upper(), True, Colors.MUTED)
-            surface.blit(lbl, (sx + 12, sy + 6))
+            lbl = self._small_font.render(label, True, Colors.MUTED)
+            surface.blit(lbl, (sx + 14, sy + 8))
 
             # Value
             val = self._stat_font.render(value, True, color)
-            surface.blit(val, (sx + 12, sy + 24))
+            surface.blit(val, (sx + 14, sy + 26))
 
         # Algorithm description section
-        algo_y = stat_start_y + 3 * (stat_h + stat_gap) + 10
+        algo_y = stat_start_y + 3 * (stat_h + row_gap) + 10
         algo_name = results.get("algo_name", "")
         algo_desc = results.get("algo_desc", "")
 
-        if algo_name:
+        if algo_name and algo_y + 60 < panel_rect.bottom:
             # Divider line
             pygame.draw.line(surface, Colors.BORDER,
-                            (card_rect.left + 30, algo_y),
-                            (card_rect.right - 30, algo_y), 1)
+                            (panel_rect.left + 30, algo_y),
+                            (panel_rect.right - 30, algo_y), 1)
             algo_y += 12
 
             algo_title = self._sub_font.render(
@@ -286,18 +345,28 @@ class ScreenManager:
             algo_y += 22
 
             for line in algo_desc.split("\n"):
-                desc = self._small_font.render(line, True, Colors.MUTED)
+                desc = self._small_font.render(line, True, (210, 190, 150))
                 surface.blit(desc, desc.get_rect(centerx=cx, top=algo_y))
                 algo_y += 16
 
-        # Buttons row: Menu | View Maps | Play Again
-        btn_y = card_rect.bottom + 20
-        self._menu_rect = pygame.Rect(cx - 240, btn_y, 140, 42)
-        self._review_rect = pygame.Rect(cx - 70, btn_y, 140, 42)
-        self._again_rect = pygame.Rect(cx + 100, btn_y, 140, 42)
-        self._draw_button(surface, self._menu_rect, "Menu", primary=False)
-        self._draw_button(surface, self._review_rect, "View Maps", primary=False)
-        self._draw_button(surface, self._again_rect, "Play Again")
+        # Buttons row using sprite buttons
+        btn_w, btn_h = 155, 48
+        btn_y = panel_rect.bottom + 20
+        btn_gap = 16
+        total_btn_w = 3 * btn_w + 2 * btn_gap
+        btn_start_x = cx - total_btn_w // 2
+
+        # Menu button
+        self._menu_rect = pygame.Rect(btn_start_x, btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "menu", self._menu_rect)
+
+        # View Maps button
+        self._review_rect = pygame.Rect(btn_start_x + btn_w + btn_gap, btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "view_maps", self._review_rect)
+
+        # Play Again button
+        self._again_rect = pygame.Rect(btn_start_x + 2 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "play_again", self._again_rect)
 
     def handle_end_click(self, pos: tuple) -> str:
         """Handle click on end screen. Returns 'title', 'game', 'review', or None."""
@@ -312,11 +381,12 @@ class ScreenManager:
     def render_review(self, surface: pygame.Surface, results: dict, speed_label: str = "1x"):
         """Draw UI elements for the review screen (algorithm description & back button)."""
         cx = WINDOW_WIDTH // 2
-        cy = WINDOW_HEIGHT - 120
-        
+
+        # Position below the grids (grids end at ~430px with review_grid_px=380 + grid_y=50)
         card_w = 600
-        card_h = 100
-        card_rect = pygame.Rect(cx - card_w // 2, cy - 20, card_w, card_h)
+        card_h = 90
+        card_y = WINDOW_HEIGHT - 160
+        card_rect = pygame.Rect(cx - card_w // 2, card_y, card_w, card_h)
         pygame.draw.rect(surface, Colors.CARD, card_rect, border_radius=12)
         pygame.draw.rect(surface, Colors.BORDER, card_rect, width=1, border_radius=12)
 
@@ -324,21 +394,22 @@ class ScreenManager:
         algo_desc = results.get("algo_desc", "")
 
         algo_title = self._sub_font.render(f"AI Algorithm: {algo_name}", True, Colors.GOLD)
-        surface.blit(algo_title, algo_title.get_rect(centerx=cx, top=card_rect.top + 10))
+        surface.blit(algo_title, algo_title.get_rect(centerx=cx, top=card_rect.top + 8))
 
-        y = card_rect.top + 35
+        y = card_rect.top + 30
         for line in algo_desc.split("\n"):
-            desc = self._small_font.render(line, True, Colors.MUTED)
+            desc = self._small_font.render(line, True, (210, 190, 150))
             surface.blit(desc, desc.get_rect(centerx=cx, top=y))
-            y += 16
+            y += 15
 
-        # Back button
-        btn_y = card_rect.bottom + 15
-        self._review_back_rect = pygame.Rect(cx - 150, btn_y, 140, 42)
-        self._draw_button(surface, self._review_back_rect, "← Back", primary=False)
+        # Buttons
+        btn_y = card_rect.bottom + 10
+        btn_w, btn_h = 140, 42
 
-        # Speed button
-        self._review_speed_rect = pygame.Rect(cx + 10, btn_y, 140, 42)
+        self._review_back_rect = pygame.Rect(cx - 150, btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "back", self._review_back_rect)
+
+        self._review_speed_rect = pygame.Rect(cx + 10, btn_y, btn_w, btn_h)
         self._draw_button(surface, self._review_speed_rect, f"Speed: {speed_label}", primary=False)
 
     def handle_review_click(self, pos: tuple) -> str:
@@ -349,7 +420,7 @@ class ScreenManager:
             return "speed"
         return None
 
-    # ==================== STARS ====================
+    # ==================== STARS (fallback) ====================
     def _draw_stars(self, surface: pygame.Surface):
         """Draw twinkling star dots on the background."""
         import random as _r
@@ -392,13 +463,6 @@ class NotificationManager:
             self._font = pygame.font.SysFont("segoeuisymbol", 16, bold=True)
         except Exception:
             self._font = pygame.font.Font(None, 18)
-
-    def show(self, msg: str, duration: float = 2.5):
-        """Show a notification message."""
-        self._message = msg
-        self._timer = 0.0
-        self._duration = duration
-        self._active = True
 
     def update(self, dt: float):
         """Update notification timer."""

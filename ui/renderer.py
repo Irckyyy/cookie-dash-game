@@ -1,6 +1,7 @@
 """
 ui/renderer.py — Handles rendering of the game grid and entities.
 Translated from HTML canvas drawing logic (drawGrid, drawEntity, etc.).
+Now uses pixel-art sprite assets instead of emoji text rendering.
 """
 
 import pygame
@@ -8,6 +9,7 @@ from setting import (
     Colors, Tile, GRID_PX, SIZE, TILE_SIZE, TILE_GAP, GRID_PADDING
 )
 from utils.helper import manhattan
+from ui.assets import assets
 
 
 class GridRenderer:
@@ -19,7 +21,10 @@ class GridRenderer:
         self._symbol_font = None
         self._emoji_font = None
         self._init_fonts()
-        self._use_emoji = True
+
+        # Track player facing direction per entity
+        self._human_facing = "down"
+        self._ai_facing = "down"
 
     def _init_fonts(self):
         try:
@@ -30,81 +35,153 @@ class GridRenderer:
             self._small_font = pygame.font.Font(None, 14)
             self._symbol_font = pygame.font.Font(None, 20)
             self._emoji_font = pygame.font.Font(None, 26)
-            self._use_emoji = False
 
-    def _get_tile_bg(self, tile_type: int, is_revealed: bool, key: str, delivered: set):
-        """Determine background color for a tile."""
+    def _get_direction_from_delta(self, dx: int, dy: int) -> str:
+        """Convert movement delta to a facing direction string."""
+        if abs(dx) > abs(dy):
+            return "right" if dx > 0 else "left"
+        elif dy != 0:
+            return "down" if dy > 0 else "up"
+        return None  # no movement
+
+    def _draw_tile_bg(self, surface: pygame.Surface, tile_rect: pygame.Rect,
+                      tile_type: int, is_revealed: bool, key: str,
+                      delivered: set, ai_brain_state: dict = None,
+                      is_player_here: bool = False):
+        """Draw the background image/color for a tile."""
         if not is_revealed:
-            return Colors.TILE_HIDDEN
+            # Draw the empty (dark) tile sprite
+            surface.blit(assets.empty_tile, tile_rect)
+            return
 
-        if tile_type == Tile.HOUSE:
-            if key in delivered:
-                return Colors.TILE_HOUSE_DEL_SOLID  # Delivered house
-            return Colors.TILE_HOUSE_SOLID      # Undelivered house
+        # Draw the grass base for all revealed tiles
+        surface.blit(assets.filled_tile, tile_rect)
 
-        bg_map = {
-            Tile.EMPTY: Colors.TILE_REVEALED,
-            Tile.WALL: Colors.BORDER,
-            Tile.PUDDLE: Colors.TILE_PUDDLE_SOLID,
-            Tile.BROKEN: Colors.TILE_BROKEN_SOLID,
-            Tile.EXIT: Colors.TILE_EXIT_SOLID,
-        }
-        return bg_map.get(tile_type, Colors.TILE_REVEALED)
+        # AI Brain visualizations — tinted overlays
+        if ai_brain_state and tile_type not in (Tile.WALL, Tile.PUDDLE, Tile.BROKEN):
+            overlay = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            if key in ai_brain_state.get('pruned', set()):
+                overlay.fill((200, 40, 40, 80))  # Red tint for pruned
+                surface.blit(overlay, tile_rect)
+            elif key in ai_brain_state.get('visited', set()):
+                overlay.fill((200, 200, 40, 60))  # Yellow tint for visited
+                surface.blit(overlay, tile_rect)
 
-    def _get_tile_border_color(self, tile_type: int, is_revealed: bool, key: str, delivered: set):
-        """Determine border color if needed (e.g., for houses)."""
-        if not is_revealed:
-            return None
-        if tile_type == Tile.HOUSE:
-            return Colors.GREEN if key in delivered else Colors.GOLD
-        if tile_type == Tile.WALL:
-            return Colors.BORDER
-        return None
+        if ai_brain_state and is_player_here and 'Penalty' in ai_brain_state.get('state', ''):
+            overlay = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            overlay.fill((255, 50, 50, 120))
+            surface.blit(overlay, tile_rect)
 
-    def _get_tile_text(self, tile_type: int, is_player_here: bool, is_human: bool,
-                       key: str, delivered: set):
-        """Returns (text_string, text_color) for a tile."""
+    def _draw_tile_entity(self, surface: pygame.Surface, tile_rect: pygame.Rect,
+                          tile_type: int, is_player_here: bool, is_human: bool,
+                          key: str, delivered: set, is_revealed: bool):
+        """Draw the entity sprite on top of a tile."""
+        if not is_revealed and not is_player_here:
+            return
+
         if is_player_here:
-            if self._use_emoji:
-                return ("👧", Colors.TEXT) if is_human else ("🤖", Colors.TEXT)
-            else:
-                return ("You", Colors.BLUE) if is_human else ("AI", Colors.PURPLE)
+            # Draw player sprite
+            facing = self._human_facing if is_human else self._ai_facing
+            sprite = assets.get_player_sprite(facing)
+            if sprite:
+                sprite_rect = sprite.get_rect(center=tile_rect.center)
+                # Shift up slightly so the character "stands" on the tile
+                sprite_rect.y -= int(TILE_SIZE * 0.12)
+                surface.blit(sprite, sprite_rect)
+            return
 
-        # Draw tile content
+        # Draw tile-specific sprites
         if tile_type == Tile.HOUSE:
-            if key in delivered:
-                return ("✅", Colors.GREEN) if self._use_emoji else ("Done", Colors.GREEN)
-            return ("🏠", Colors.GOLD) if self._use_emoji else ("House", Colors.GOLD)
+            sprite = assets.delivered_house if key in delivered else assets.undelivered_house
+            if sprite:
+                sprite_rect = sprite.get_rect(center=tile_rect.center)
+                surface.blit(sprite, sprite_rect)
 
         elif tile_type == Tile.PUDDLE:
-            return ("💧", Colors.BLUE) if self._use_emoji else ("~", Colors.BLUE)
+            if assets.puddle:
+                sprite_rect = assets.puddle.get_rect(center=tile_rect.center)
+                surface.blit(assets.puddle, sprite_rect)
 
         elif tile_type == Tile.BROKEN:
-            return ("🪨", Colors.TEXT) if self._use_emoji else ("X", Colors.TEXT)
+            if assets.hole:
+                sprite_rect = assets.hole.get_rect(center=tile_rect.center)
+                surface.blit(assets.hole, sprite_rect)
 
         elif tile_type == Tile.EXIT:
-            return ("🚪", Colors.GOLD) if self._use_emoji else ("EXIT", Colors.GOLD)
+            if assets.door:
+                sprite_rect = assets.door.get_rect(center=tile_rect.center)
+                surface.blit(assets.door, sprite_rect)
 
-        return None, None
+        elif tile_type == Tile.WALL:
+            # Alternate between rock and tree based on position for variety
+            x, y = [int(c) for c in key.split(",")]
+            sprite = assets.tree if (x + y) % 2 == 0 else assets.rock
+            if sprite:
+                sprite_rect = sprite.get_rect(center=tile_rect.center)
+                surface.blit(sprite, sprite_rect)
+
+        elif tile_type == Tile.START:
+            if assets.entrance:
+                sprite_rect = assets.entrance.get_rect(center=tile_rect.center)
+                surface.blit(assets.entrance, sprite_rect)
 
     def render(self, surface: pygame.Surface, x_offset: int, y_offset: int,
                player, game_map: list, is_human: bool,
                force_reveal: bool = False, path_overlay: list = None,
-               path_color: tuple = None, ai_brain_state: dict = None):
+               path_color: tuple = None, ai_brain_state: dict = None,
+               override_size: int = None):
         """
         Render the full grid onto the given surface.
         x_offset, y_offset: top-left corner of the grid wrapper.
         force_reveal: if True, show all tiles regardless of player vision.
         path_overlay: list of (x,y) positions to highlight as a path.
         path_color: color for the path overlay lines.
+        override_size: if set, scale the grid to fit this pixel size.
         """
-        # Draw grid wrapper background
-        wrapper_rect = pygame.Rect(x_offset, y_offset, GRID_PX, GRID_PX)
-        pygame.draw.rect(surface, Colors.DEEP, wrapper_rect, border_radius=12)
-        pygame.draw.rect(surface, Colors.BORDER, wrapper_rect, width=2, border_radius=12)
+        # Calculate tile dimensions — scaled if override_size is provided
+        if override_size:
+            grid_px = override_size
+            grid_padding = max(4, int(GRID_PADDING * override_size / GRID_PX))
+            inner = grid_px - grid_padding * 2
+            tile_gap = max(1, int(TILE_GAP * override_size / GRID_PX))
+            tile_size = (inner - (SIZE - 1) * tile_gap) // SIZE
+        else:
+            grid_px = GRID_PX
+            grid_padding = GRID_PADDING
+            tile_gap = TILE_GAP
+            tile_size = TILE_SIZE
+
+        # Draw grid wrapper background (brown border matching mockup)
+        wrapper_rect = pygame.Rect(x_offset, y_offset, grid_px, grid_px)
+        pygame.draw.rect(surface, (101, 67, 33), wrapper_rect, border_radius=6)
+        pygame.draw.rect(surface, (82, 54, 27), wrapper_rect, width=4, border_radius=6)
 
         # Use the end of the path overlay as the player's animated position
         current_pos = path_overlay[-1] if path_overlay else player.pos
+
+        # Update facing direction based on path or movement
+        if path_overlay and len(path_overlay) >= 2:
+            prev = path_overlay[-2]
+            curr = path_overlay[-1]
+            dx = curr[0] - prev[0]
+            dy = curr[1] - prev[1]
+            new_dir = self._get_direction_from_delta(dx, dy)
+            if new_dir:
+                if is_human:
+                    self._human_facing = new_dir
+                else:
+                    self._ai_facing = new_dir
+        elif hasattr(player, 'path_history') and len(player.path_history) >= 2:
+            prev = player.path_history[-2]
+            curr = player.path_history[-1]
+            dx = curr[0] - prev[0]
+            dy = curr[1] - prev[1]
+            new_dir = self._get_direction_from_delta(dx, dy)
+            if new_dir:
+                if is_human:
+                    self._human_facing = new_dir
+                else:
+                    self._ai_facing = new_dir
 
         # Draw each tile
         for y in range(SIZE):
@@ -115,25 +192,14 @@ class GridRenderer:
                 is_player_here = (current_pos[0] == x and current_pos[1] == y)
 
                 # Calculate tile pixel position
-                tx = x_offset + GRID_PADDING + x * (TILE_SIZE + TILE_GAP)
-                ty = y_offset + GRID_PADDING + y * (TILE_SIZE + TILE_GAP)
-                tile_rect = pygame.Rect(tx, ty, TILE_SIZE, TILE_SIZE)
+                tx = x_offset + grid_padding + x * (tile_size + tile_gap)
+                ty = y_offset + grid_padding + y * (tile_size + tile_gap)
+                tile_rect = pygame.Rect(tx, ty, tile_size, tile_size)
 
-                # Background
-                bg = self._get_tile_bg(tile_type, is_revealed, key,
-                                       player.delivered_houses)
-                
-                # AI Brain visualizations
-                if ai_brain_state and tile_type not in (Tile.WALL, Tile.PUDDLE, Tile.BROKEN):
-                    if key in ai_brain_state.get('pruned', set()):
-                        bg = (100, 40, 40)  # Red tint for pruned
-                    elif key in ai_brain_state.get('visited', set()):
-                        bg = (100, 100, 40) # Yellow tint for visited
-                        
-                if ai_brain_state and is_player_here and 'Penalty' in ai_brain_state.get('state', ''):
-                    bg = (200, 50, 50)  # Flash red when hitting hazard
-
-                pygame.draw.rect(surface, bg, tile_rect, border_radius=5)
+                # Draw tile background (grass or dark)
+                self._draw_tile_bg(surface, tile_rect, tile_type, is_revealed,
+                                   key, player.delivered_houses, ai_brain_state,
+                                   is_player_here)
 
                 # Special border for typed tiles
                 if is_revealed:
@@ -142,7 +208,7 @@ class GridRenderer:
                     )
                     if border_color:
                         pygame.draw.rect(surface, border_color, tile_rect,
-                                         width=1, border_radius=5)
+                                         width=1, border_radius=3)
 
                 # Player glow effect
                 if is_player_here:
@@ -154,37 +220,40 @@ class GridRenderer:
                     pygame.draw.rect(surface, glow_color, glow_inner,
                                      width=1, border_radius=5)
 
-                # Text on tile
-                if is_revealed or is_player_here:
-                    text, color = self._get_tile_text(
-                        tile_type, is_player_here, is_human,
-                        key, player.delivered_houses
-                    )
-                    font = self._emoji_font if (self._use_emoji and text and len(text) <= 2) else self._symbol_font
-                    
-                    if ai_brain_state and not text and tile_type in (Tile.EMPTY, Tile.START):
+                # Draw entity sprite on tile
+                self._draw_tile_entity(surface, tile_rect, tile_type,
+                                       is_player_here, is_human,
+                                       key, player.delivered_houses, is_revealed)
+
+                # AI heuristic text overlay (review mode)
+                if ai_brain_state and is_revealed and not is_player_here:
+                    if tile_type in (Tile.EMPTY, Tile.START):
                         target = ai_brain_state.get('target')
                         if target:
-                            text = str(manhattan((x, y), target))
-                            color = (120, 120, 120)  # Muted gray for heuristics
-                            font = self._small_font
-                    if text:
-                        if len(text) > 1 and not self._use_emoji and font == self._emoji_font:
-                            font = self._small_font
-                        try:
-                            text_surf = font.render(text, True, color)
-                            text_rect = text_surf.get_rect(center=tile_rect.center)
-                            surface.blit(text_surf, text_rect)
-                        except Exception:
-                            pass
+                            h_val = str(manhattan((x, y), target))
+                            h_surf = self._small_font.render(h_val, True, (255, 255, 255))
+                            # Semi-transparent background for readability
+                            bg_surf = pygame.Surface((h_surf.get_width() + 4, h_surf.get_height() + 2), pygame.SRCALPHA)
+                            bg_surf.fill((0, 0, 0, 120))
+                            bg_rect = bg_surf.get_rect(bottomright=(tile_rect.right - 2, tile_rect.bottom - 2))
+                            surface.blit(bg_surf, bg_rect)
+                            surface.blit(h_surf, (bg_rect.x + 2, bg_rect.y + 1))
 
         # Draw path overlay as continuous lines
         if path_overlay and len(path_overlay) > 1:
             line_color = path_color or (Colors.BLUE if is_human else Colors.PURPLE)
             points = []
             for px, py in path_overlay:
-                tx = x_offset + GRID_PADDING + px * (TILE_SIZE + TILE_GAP) + TILE_SIZE // 2
-                ty = y_offset + GRID_PADDING + py * (TILE_SIZE + TILE_GAP) + TILE_SIZE // 2
-                points.append((tx, ty))
-            
+                ptx = x_offset + grid_padding + px * (tile_size + tile_gap) + tile_size // 2
+                pty = y_offset + grid_padding + py * (tile_size + tile_gap) + tile_size // 2
+                points.append((ptx, pty))
+
             pygame.draw.lines(surface, (*line_color, 180), False, points, width=3)
+
+    def _get_tile_border_color(self, tile_type: int, is_revealed: bool, key: str, delivered: set):
+        """Determine border color if needed (e.g., for houses)."""
+        if not is_revealed:
+            return None
+        if tile_type == Tile.HOUSE:
+            return Colors.GREEN if key in delivered else Colors.GOLD
+        return None

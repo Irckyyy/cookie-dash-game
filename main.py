@@ -19,6 +19,7 @@ from ui.hud import HUD
 from ui.screens import ScreenManager, NotificationManager
 from variants.scoring import calculate_results
 from utils.helper import format_time
+from ui.assets import assets
 
 
 class Game:
@@ -36,6 +37,9 @@ class Game:
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption(GAME_TITLE)
         self.clock = pygame.time.Clock()
+
+        # Load all sprite assets (must happen after display init)
+        assets.load_all(TILE_SIZE)
 
         # UI components
         self.grid_renderer = GridRenderer()
@@ -243,6 +247,11 @@ class Game:
             difficulty = self.screen_mgr.selected_difficulty
             game_state = {"elapsed": self.elapsed}
             events = self.human.move(dx, dy, self.game_map, difficulty, game_state)
+            # Update player facing direction for sprite rendering
+            dir_map = {(0, -1): "up", (0, 1): "down", (-1, 0): "left", (1, 0): "right"}
+            facing = dir_map.get((dx, dy))
+            if facing:
+                self.grid_renderer._human_facing = facing
             self._process_events(events)
 
     def update(self, dt: float):
@@ -326,8 +335,7 @@ class Game:
 
     def _render_game(self):
         """Render the gameplay screen with only human grid visible."""
-        self.screen.fill(Colors.NIGHT)
-        self.screen_mgr._draw_stars(self.screen)
+        self.screen_mgr._draw_sky_background(self.screen)
 
         self.hud.render(self.screen, self.human, self.ai_player, self.elapsed, y_offset=10)
 
@@ -342,11 +350,10 @@ class Game:
             shake_x = random.randint(-intensity, intensity)
             shake_y = random.randint(-intensity, intensity)
 
-        # Apply the shake offset to the render coordinates
+            # Apply the shake offset to the render coordinates
             render_x = start_x + shake_x
             render_y = grid_y + shake_y
 
-        if self.shake_timer > 0:
             # Create a surface that supports transparency (SRCALPHA)
             flash_surf = pygame.Surface((GRID_PX, GRID_PX), pygame.SRCALPHA)
             # Calculate alpha (transparency) so it fades out smoothly
@@ -354,13 +361,14 @@ class Game:
             flash_surf.fill((*Colors.RED, alpha)) 
             # Draw it exactly over the shaking grid
             self.screen.blit(flash_surf, (render_x, render_y))
+
         try:
             label_font = pygame.font.SysFont("segoeuisymbol", 16, bold=True)
         except Exception:
             label_font = pygame.font.Font(None, 18)
 
         pygame.draw.circle(self.screen, Colors.BLUE, (start_x + 6, grid_y - 14), 5)
-        lbl = label_font.render("Your View (AI is hidden in background)", True, Colors.MUTED)
+        lbl = label_font.render("Your View (AI is hidden in background)", True, Colors.WHITE)
         self.screen.blit(lbl, (start_x + 18, grid_y - 22))
 
         self.grid_renderer.render(
@@ -372,7 +380,7 @@ class Game:
             hint_font = pygame.font.SysFont("segoeuisymbol", 11)
         except Exception:
             hint_font = pygame.font.Font(None, 13)
-        hint = hint_font.render("Arrow keys or WASD to move", True, Colors.MUTED)
+        hint = hint_font.render("Arrow keys or WASD to move", True, Colors.WHITE)
         self.screen.blit(hint, hint.get_rect(centerx=start_x + GRID_PX // 2, top=grid_y + GRID_PX + 8))
 
         log_y = grid_y + GRID_PX + 30
@@ -380,39 +388,41 @@ class Game:
 
     def _render_review(self):
         """Render the review screen showing both maps fully revealed with paths."""
-        self.screen.fill(Colors.NIGHT)
-        self.screen_mgr._draw_stars(self.screen)
+        self.screen_mgr._draw_sky_background(self.screen)
 
-        gap = 30
-        total_w = GRID_PX * 2 + gap
+        # Scale grids to fit everything in the window
+        review_grid_px = 380
+        gap = 24
+        total_w = review_grid_px * 2 + gap
         start_x = (WINDOW_WIDTH - total_w) // 2
-        grid_y = 60
+        grid_y = 50
 
         try:
-            label_font = pygame.font.SysFont("segoeuisymbol", 16, bold=True)
-            hint_font = pygame.font.SysFont("segoeuisymbol", 14)
+            label_font = pygame.font.SysFont("segoeuisymbol", 15, bold=True)
+            hint_font = pygame.font.SysFont("segoeuisymbol", 13)
         except Exception:
-            label_font = pygame.font.Font(None, 18)
-            hint_font = pygame.font.Font(None, 16)
+            label_font = pygame.font.Font(None, 17)
+            hint_font = pygame.font.Font(None, 15)
 
         # Human map
-        pygame.draw.circle(self.screen, Colors.BLUE, (start_x + 6, grid_y - 14), 5)
-        lbl = label_font.render("Your Path", True, Colors.MUTED)
-        self.screen.blit(lbl, (start_x + 18, grid_y - 22))
+        pygame.draw.circle(self.screen, Colors.BLUE, (start_x + 6, grid_y - 12), 5)
+        lbl = label_font.render("Your Path", True, Colors.WHITE)
+        self.screen.blit(lbl, (start_x + 16, grid_y - 20))
 
         h_path = self.human.path_history[:min(self.review_anim_index, len(self.human.path_history))]
 
         self.grid_renderer.render(
             self.screen, start_x, grid_y,
             self.human, self.game_map, is_human=True, force_reveal=True,
-            path_overlay=h_path, path_color=Colors.BLUE
+            path_overlay=h_path, path_color=Colors.BLUE,
+            override_size=review_grid_px
         )
 
         # AI map
-        ai_x = start_x + GRID_PX + gap
-        pygame.draw.circle(self.screen, Colors.PURPLE, (ai_x + 6, grid_y - 14), 5)
-        lbl = label_font.render("AI Path", True, Colors.MUTED)
-        self.screen.blit(lbl, (ai_x + 18, grid_y - 22))
+        ai_x = start_x + review_grid_px + gap
+        pygame.draw.circle(self.screen, Colors.PURPLE, (ai_x + 6, grid_y - 12), 5)
+        lbl = label_font.render("AI Path", True, Colors.WHITE)
+        self.screen.blit(lbl, (ai_x + 16, grid_y - 20))
 
         a_log = self.ai_agent.replay_log[:min(self.review_anim_index, len(self.ai_agent.replay_log))]
         a_path = [entry['pos'] for entry in a_log]
@@ -422,26 +432,27 @@ class Game:
             self.screen, ai_x, grid_y,
             self.ai_player, self.game_map, is_human=False, force_reveal=True,
             path_overlay=a_path, path_color=Colors.PURPLE,
-            ai_brain_state=ai_brain_state
+            ai_brain_state=ai_brain_state,
+            override_size=review_grid_px
         )
 
-        # Draw AI Brain panel below the AI map
+        # AI Status panel below the AI map
+        panel_y = grid_y + review_grid_px + 8
         if ai_brain_state:
-            panel_y = grid_y + GRID_PX + 10
-            panel_rect = pygame.Rect(ai_x, panel_y, GRID_PX, 95)
+            panel_rect = pygame.Rect(ai_x, panel_y, review_grid_px, 80)
             pygame.draw.rect(self.screen, Colors.DEEP, panel_rect, border_radius=8)
             pygame.draw.rect(self.screen, Colors.BORDER, panel_rect, width=2, border_radius=8)
 
             try:
-                b_font = pygame.font.SysFont("segoeuisymbol", 12)
-                t_font = pygame.font.SysFont("segoeuisymbol", 14, bold=True)
+                b_font = pygame.font.SysFont("segoeuisymbol", 11)
+                t_font = pygame.font.SysFont("segoeuisymbol", 13, bold=True)
             except Exception:
-                b_font = pygame.font.Font(None, 16)
-                t_font = pygame.font.Font(None, 18)
+                b_font = pygame.font.Font(None, 15)
+                t_font = pygame.font.Font(None, 17)
 
             title = t_font.render("🤖 AI STATUS", True, Colors.GOLD)
-            self.screen.blit(title, (ai_x + 10, panel_y + 8))
-            
+            self.screen.blit(title, (ai_x + 10, panel_y + 6))
+
             target_str = str(ai_brain_state.get('target', 'None'))
             h_str = str(ai_brain_state.get('h_n', 0))
             state_str = ai_brain_state.get('state', 'Unknown')
@@ -454,19 +465,19 @@ class Game:
                 f"State: {state_str}",
                 f"Pruned: {pruned_count}   Visited: {visited_count}   Backtracks: {stuck_count}"
             ]
-            
-            py = panel_y + 30
+
+            py = panel_y + 24
             for l in lines:
                 l_surf = b_font.render(l, True, Colors.MUTED)
                 self.screen.blit(l_surf, (ai_x + 10, py))
-                py += 20
+                py += 17
 
-        # Draw Pause/Play status
+        # Pause/Play status
         status_text = "Paused (Space to play, Right/Left to step)" if getattr(self, 'review_paused', False) else "Playing (Space to pause)"
-        status_surf = hint_font.render(status_text, True, Colors.MUTED)
-        self.screen.blit(status_surf, (WINDOW_WIDTH//2 - status_surf.get_width()//2, grid_y - 45))
+        status_surf = hint_font.render(status_text, True, Colors.WHITE)
+        self.screen.blit(status_surf, (WINDOW_WIDTH//2 - status_surf.get_width()//2, grid_y - 35))
 
-        # Call screen manager to draw the review UI (back button and AI explanation)
+        # Review UI (algo card + buttons)
         speed_label = self.review_speed_labels[self.review_speed_idx]
         self.screen_mgr.render_review(self.screen, self.results, speed_label)
 

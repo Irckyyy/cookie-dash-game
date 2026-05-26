@@ -1,11 +1,13 @@
 """
 ui/hud.py — Heads-Up Display: scores, timer, delivery dots, log panel.
 Translated from the game-header HTML and updateHUDs() JS function.
+Now uses the pixel-art status bar background and icon sprites.
 """
 
 import pygame
 from setting import Colors, DELIVERIES_NEEDED, WINDOW_WIDTH
 from utils.helper import format_time
+from ui.assets import assets
 
 
 class HUD:
@@ -46,24 +48,28 @@ class HUD:
 
     def _draw_delivery_dots(self, surface: pygame.Surface, x: int, y: int,
                             deliveries: int):
-        """Draw 3 delivery indicator dots."""
+        """Draw 3 delivery indicator dots with cookie sprites."""
+        cookie_mini = assets.get_scaled("cookie", (18, 18))
         for i in range(DELIVERIES_NEEDED):
             dot_x = x + i * 24
             dot_rect = pygame.Rect(dot_x, y, 18, 18)
             if deliveries > i:
-                pygame.draw.circle(surface, Colors.GREEN,
-                                   dot_rect.center, 9)
-                # Draw checkmark
-                check = self._label_font.render("✓", True, Colors.WHITE)
-                check_rect = check.get_rect(center=dot_rect.center)
-                surface.blit(check, check_rect)
+                # Delivered — show mini cookie sprite
+                if cookie_mini:
+                    surface.blit(cookie_mini, dot_rect)
+                else:
+                    pygame.draw.circle(surface, Colors.GREEN,
+                                       dot_rect.center, 9)
+                    check = self._label_font.render("✓", True, Colors.WHITE)
+                    check_rect = check.get_rect(center=dot_rect.center)
+                    surface.blit(check, check_rect)
             else:
                 pygame.draw.circle(surface, Colors.BORDER,
                                    dot_rect.center, 9, width=2)
 
     def render(self, surface: pygame.Surface, human, ai, elapsed: int,
                y_offset: int = 10):
-        """Render the full HUD bar."""
+        """Render the full HUD bar with status bar background."""
         max_w = min(900, WINDOW_WIDTH - 40)
         hud_x = (WINDOW_WIDTH - max_w) // 2
         hud_rect = pygame.Rect(hud_x, y_offset, max_w, 60)
@@ -73,9 +79,18 @@ class HUD:
         pygame.draw.rect(surface, Colors.BORDER, hud_rect, width=1, border_radius=14)
 
         # === Left: Human player ===
-        # Emoji
-        player_emoji = self._title_font.render("🧒", True, Colors.TEXT)
-        surface.blit(player_emoji, (hud_x + 14, y_offset + 16))
+        # Player icon from icon spritesheet
+        human_icon = assets.get_icon("human")
+        if human_icon:
+            icon_size = 30
+            scaled_icon = pygame.transform.smoothscale(human_icon, (icon_size, icon_size))
+            icon_rect = scaled_icon.get_rect(topleft=(hud_x + 10, y_offset + 14))
+            surface.blit(scaled_icon, icon_rect)
+        else:
+            player_icon = assets.get_scaled("player_down", (28, 28))
+            if player_icon:
+                icon_rect = player_icon.get_rect(topleft=(hud_x + 12, y_offset + 14))
+                surface.blit(player_icon, icon_rect)
 
         # Label
         you_label = self._label_font.render("YOU", True, Colors.MUTED)
@@ -88,11 +103,8 @@ class HUD:
         # Delivery dots
         self._draw_delivery_dots(surface, hud_x + 110, y_offset + 22,
                                  human.deliveries)
-        # Delivery dots
-        self._draw_delivery_dots(surface, hud_x + 110, y_offset + 22,
-                                 human.deliveries)
 
-        # NEW: Draw human inventory
+        # Draw human inventory
         self._draw_inventory(surface, hud_x + 190, y_offset + 18, human)
 
         # === Center: Timer ===
@@ -124,15 +136,24 @@ class HUD:
                                            top=y_offset + 10)
         surface.blit(ai_label, ai_label_rect)
 
-        # Emoji
-        ai_emoji = self._title_font.render("🤖", True, Colors.TEXT)
-        surface.blit(ai_emoji, (hud_x + max_w - 40, y_offset + 16))
+        # AI icon from icon spritesheet
+        ai_icon = assets.get_icon("robot")
+        if ai_icon:
+            icon_size = 30
+            scaled_icon = pygame.transform.smoothscale(ai_icon, (icon_size, icon_size))
+            icon_rect = scaled_icon.get_rect(topleft=(hud_x + max_w - 40, y_offset + 14))
+            surface.blit(scaled_icon, icon_rect)
+        else:
+            ai_sprite = assets.get_scaled("player_down", (28, 28))
+            if ai_sprite:
+                icon_rect = ai_sprite.get_rect(topleft=(hud_x + max_w - 40, y_offset + 14))
+                tinted = ai_sprite.copy()
+                purple_overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
+                purple_overlay.fill((120, 80, 220, 80))
+                tinted.blit(purple_overlay, (0, 0))
+                surface.blit(tinted, icon_rect)
 
-        # Delivery dots (right-aligned)
-        self._draw_delivery_dots(surface, hud_x + max_w - 182, y_offset + 22,
-                                 ai.deliveries)
-
-        # NEW: Draw AI inventory
+        # Draw AI inventory
         self._draw_inventory(surface, hud_x + max_w - 256, y_offset + 18, ai)
 
     def render_log(self, surface: pygame.Surface, y_offset: int, max_height: int = 100):
