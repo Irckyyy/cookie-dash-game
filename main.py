@@ -87,10 +87,11 @@ class Game:
         self.houses = map_data["houses"]
         self.exit_pos = map_data["exit_pos"]
         self.bfs_trace = map_data.get("bfs_trace", [])
+        start_pos = map_data.get("start_pos", (0, 0))
 
         # Initialize players
-        self.human = Player(is_human=True)
-        self.ai_player = Player(is_human=False)
+        self.human = Player(is_human=True, start_pos=start_pos)
+        self.ai_player = Player(is_human=False, start_pos=start_pos)
         self.ai_agent = AIAgent(self.ai_player, self.game_map,
                                  self.houses, self.exit_pos)
 

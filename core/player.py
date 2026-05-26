@@ -18,14 +18,14 @@ from setting import (
 class Player:
     """Represents a player (human or AI) on the game board."""
 
-    def __init__(self, is_human: bool):
+    def __init__(self, is_human: bool, start_pos: tuple = (0, 0)):
         self.is_human = is_human
-        self.pos = (0, 0)          # (x, y) position
+        self.pos = start_pos          # (x, y) position
         self.score = 0
         self.deliveries = 0
         self.delivered_houses = set()   # set of "x,y" keys
-        self.revealed_tiles = {"0,0"}
-        self.path_history = [(0, 0)]
+        self.revealed_tiles = {f"{start_pos[0]},{start_pos[1]}"}
+        self.path_history = [start_pos]
         self.finished = False
         self.finish_time = None
         self.penalty_count = {"puddle": 0, "broken": 0}

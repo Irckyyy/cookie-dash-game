@@ -100,47 +100,53 @@ def generate_map() -> dict:
     """
     Generate a valid game map with obstacles, houses, and exit.
     Retries until BFS confirms all targets are reachable from start.
-    Returns dict with 'grid', 'houses', 'exit_pos', 'bfs_trace'.
+    Returns dict with 'grid', 'houses', 'start_pos', 'exit_pos', 'bfs_trace'.
     """
     for _ in range(100):
         grid = make_grid()
 
-        # Place random obstacles (~13% puddle, ~9% broken)
-        for y in range(SIZE):
-            for x in range(SIZE):
-                r = random.random()
-                if r < PUDDLE_CHANCE:
-                    grid[y][x] = Tile.PUDDLE
-                elif r < PUDDLE_CHANCE + BROKEN_CHANCE:
-                    grid[y][x] = Tile.BROKEN
+        # Generate all coordinates and shuffle them
+        all_coords = [(x, y) for x in range(SIZE) for y in range(SIZE)]
+        random.shuffle(all_coords)
 
-        # Clear start area
-        sx, sy = START_POSITION
+        # Pick critical locations so they never overlap
+        start_pos = all_coords.pop()
+        exit_pos = all_coords.pop()
+        houses = [all_coords.pop() for _ in range(3)]
+
+        # Place start, exit, houses
+        sx, sy = start_pos
         grid[sy][sx] = Tile.START
-        # Clear adjacent tiles to start
-        if sx + 1 < SIZE:
-            grid[sy][sx + 1] = Tile.EMPTY
-        if sy + 1 < SIZE:
-            grid[sy + 1][sx] = Tile.EMPTY
-
-        # Place houses
-        houses = []
-        for hx, hy in HOUSE_POSITIONS:
-            grid[hy][hx] = Tile.HOUSE
-            houses.append((hx, hy))
-
-        # Place exit
-        ex, ey = EXIT_POSITION
+        
+        ex, ey = exit_pos
         grid[ey][ex] = Tile.EXIT
 
+        for hx, hy in houses:
+            grid[hy][hx] = Tile.HOUSE
+
+        # Clear adjacent tiles to start to give the player some breathing room
+        for dx, dy in DIRS:
+            nx, ny = sx + dx, sy + dy
+            if 0 <= nx < SIZE and 0 <= ny < SIZE and (nx, ny) in all_coords:
+                all_coords.remove((nx, ny))
+
+        # Place random obstacles in the remaining empty coordinates
+        for x, y in all_coords:
+            r = random.random()
+            if r < PUDDLE_CHANCE:
+                grid[y][x] = Tile.PUDDLE
+            elif r < PUDDLE_CHANCE + BROKEN_CHANCE:
+                grid[y][x] = Tile.BROKEN
+
         # Validate: BFS must reach all houses + exit from start
-        all_targets = houses + [EXIT_POSITION]
-        reachable, bfs_trace = bfs_reachable_traced(grid, START_POSITION, all_targets)
+        all_targets = houses + [exit_pos]
+        reachable, bfs_trace = bfs_reachable_traced(grid, start_pos, all_targets)
         if reachable:
             return {
                 "grid": grid,
                 "houses": houses,
-                "exit_pos": EXIT_POSITION,
+                "start_pos": start_pos,
+                "exit_pos": exit_pos,
                 "bfs_trace": bfs_trace,
             }
 
@@ -148,6 +154,7 @@ def generate_map() -> dict:
     return {
         "grid": grid,
         "houses": houses,
-        "exit_pos": EXIT_POSITION,
+        "start_pos": start_pos,
+        "exit_pos": exit_pos,
         "bfs_trace": bfs_trace,
     }
