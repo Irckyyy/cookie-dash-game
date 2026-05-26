@@ -9,7 +9,7 @@ import pygame
 from setting import (
     WINDOW_WIDTH, WINDOW_HEIGHT, FPS, GAME_TITLE,
     Colors, GRID_PX, SIZE, TILE_SIZE, TILE_GAP, GRID_PADDING,
-    DIFFICULTY_CONFIG,
+    DIFFICULTY_CONFIG, Tile
 )
 from core.map_gen import generate_map
 from core.player import Player
@@ -31,6 +31,7 @@ class Game:
     PLAYING    = "game"
     END        = "end"
     REVIEW     = "review"
+    BFS_VIZ    = "bfs_viz"
 
     def __init__(self):
         pygame.init()
@@ -85,6 +86,7 @@ class Game:
         self.game_map = map_data["grid"]
         self.houses = map_data["houses"]
         self.exit_pos = map_data["exit_pos"]
+        self.bfs_trace = map_data.get("bfs_trace", [])
 
         # Initialize players
         self.human = Player(is_human=True)
@@ -203,6 +205,11 @@ class Game:
                 self.review_anim_index = 1
                 self.review_anim_timer = 0.0
                 self.review_paused = True
+            elif result == "bfs_viz":
+                self.state = self.BFS_VIZ
+                self.bfs_anim_index = 0
+                self.bfs_anim_timer = 0.0
+                self.bfs_paused = False
 
         elif self.state == self.REVIEW:
             result = self.screen_mgr.handle_review_click(pos)
@@ -211,8 +218,30 @@ class Game:
             elif result == "speed":
                 self.review_speed_idx = (self.review_speed_idx + 1) % len(self.review_speeds)
 
+        elif self.state == self.BFS_VIZ:
+            result = self.screen_mgr.handle_bfs_viz_click(pos)
+            if result == "end":
+                self.state = self.END
+            elif result == "restart":
+                self.bfs_anim_index = 0
+                self.bfs_anim_timer = 0.0
+                self.bfs_paused = False
+
     def _handle_key(self, key):
         """Handle keyboard input during gameplay."""
+        if self.state == self.BFS_VIZ:
+            if key == pygame.K_SPACE:
+                self.bfs_paused = not self.bfs_paused
+            elif key == pygame.K_RIGHT:
+                self.bfs_paused = True
+                if self.bfs_anim_index < len(self.bfs_trace) - 1:
+                    self.bfs_anim_index += 1
+            elif key == pygame.K_LEFT:
+                self.bfs_paused = True
+                if self.bfs_anim_index > 0:
+                    self.bfs_anim_index -= 1
+            return
+
         if self.state == self.REVIEW:
             if key == pygame.K_SPACE:
                 self.review_paused = not getattr(self, 'review_paused', True)
@@ -260,6 +289,17 @@ class Game:
 
         if self.shake_timer > 0:
             self.shake_timer -= dt
+
+        if self.state == self.BFS_VIZ:
+            if not getattr(self, 'bfs_paused', False):
+                self.bfs_anim_timer += dt
+                if self.bfs_anim_timer >= 0.08:
+                    self.bfs_anim_timer -= 0.08
+                    if self.bfs_anim_index < len(self.bfs_trace) - 1:
+                        self.bfs_anim_index += 1
+                    else:
+                        self.bfs_paused = True
+            return
 
         if self.state == self.REVIEW:
             if not getattr(self, 'review_paused', True):
@@ -326,6 +366,9 @@ class Game:
 
         elif self.state == self.REVIEW:
             self._render_review()
+
+        elif self.state == self.BFS_VIZ:
+            self._render_bfs_viz()
 
         # Always render notification on top
         self.notif.render(self.screen)
@@ -480,6 +523,169 @@ class Game:
         # Review UI (algo card + buttons)
         speed_label = self.review_speed_labels[self.review_speed_idx]
         self.screen_mgr.render_review(self.screen, self.results, speed_label)
+
+    def _render_bfs_viz(self):
+        """Render the BFS validation visualization screen."""
+        self.screen_mgr._draw_sky_background(self.screen)
+
+        if not self.bfs_trace:
+            return
+
+        # Get current BFS state
+        idx = min(self.bfs_anim_index, len(self.bfs_trace) - 1)
+        state = self.bfs_trace[idx]
+        visited = state['visited']
+        frontier = state.get('frontier', [])
+        current = state['current']
+        found = state.get('found', set())
+        found_this = state.get('found_this_step', None)
+        new_neighbors = state.get('new_neighbors', [])
+
+        # Grid dimensions — centered, large
+        viz_grid_px = 480
+        grid_x = (WINDOW_WIDTH - viz_grid_px) // 2
+        grid_y = 65
+
+        # Render the base grid with actual game assets (force reveal all)
+        old_pos = self.human.pos
+        self.human.pos = (-1, -1)  # Hide player
+        self.grid_renderer.render(
+            self.screen, grid_x, grid_y,
+            self.human, self.game_map, is_human=True,
+            force_reveal=True, path_overlay=None,
+            override_size=viz_grid_px
+        )
+        self.human.pos = old_pos
+
+        grid_padding = max(4, int(GRID_PADDING * viz_grid_px / GRID_PX))
+        tile_gap = max(1, int(TILE_GAP * viz_grid_px / GRID_PX))
+        tile_size = (viz_grid_px - grid_padding * 2 - (SIZE - 1) * tile_gap) // SIZE
+
+        frontier_set = set(frontier)
+        new_set = set(new_neighbors)
+
+        try:
+            h_font = pygame.font.SysFont("segoeuisymbol", 10)
+            label_font = pygame.font.SysFont("segoeuisymbol", 15, bold=True)
+            info_font = pygame.font.SysFont("segoeuisymbol", 14)
+            title_font = pygame.font.SysFont("segoeuisymbol", 20, bold=True)
+        except Exception:
+            h_font = pygame.font.Font(None, 14)
+            label_font = pygame.font.Font(None, 17)
+            info_font = pygame.font.Font(None, 16)
+            title_font = pygame.font.Font(None, 22)
+
+        # Draw translucent color overlays for BFS state
+        overlay_surf = pygame.Surface((tile_size, tile_size), pygame.SRCALPHA)
+        
+        for y in range(SIZE):
+            for x in range(SIZE):
+                pos = (x, y)
+                tx = grid_x + grid_padding + x * (tile_size + tile_gap)
+                ty = grid_y + grid_padding + y * (tile_size + tile_gap)
+                tile_rect = pygame.Rect(tx, ty, tile_size, tile_size)
+
+                color = None
+                if pos == current:
+                    color = (255, 220, 50, 150)   # Yellow
+                elif pos in found:
+                    color = (200, 160, 40, 150)   # Gold
+                elif pos in new_set:
+                    color = (50, 220, 100, 150)   # Green
+                elif pos in frontier_set:
+                    color = (40, 180, 180, 150)   # Teal
+                elif pos in visited:
+                    color = (60, 100, 160, 150)   # Blue
+                
+                if color:
+                    overlay_surf.fill(color)
+                    self.screen.blit(overlay_surf, tile_rect)
+
+                # Flash when target found
+                if found_this and pos == found_this:
+                    flash = pygame.Surface((tile_size, tile_size), pygame.SRCALPHA)
+                    flash.fill((255, 255, 255, 180))
+                    self.screen.blit(flash, tile_rect)
+
+        # Title & Explanation Background Panel
+        title_bg_rect = pygame.Rect(0, 0, 600, 55)
+        title_bg_rect.centerx = WINDOW_WIDTH // 2
+        title_bg_rect.top = 5
+        pygame.draw.rect(self.screen, (20, 25, 35, 200), title_bg_rect, border_radius=10)
+        pygame.draw.rect(self.screen, Colors.BORDER, title_bg_rect, width=1, border_radius=10)
+
+        # Title
+        title = title_font.render("BFS Map Validation", True, Colors.GOLD)
+        self.screen.blit(title, title.get_rect(centerx=WINDOW_WIDTH // 2, top=10))
+
+        # Dynamic Explanation Text
+        if found_this:
+            action_text = f"Target Found! Validating reachability..."
+            action_color = (50, 220, 100)
+        elif new_neighbors:
+            action_text = f"Exploring neighbors: added {len(new_neighbors)} tiles to queue."
+            action_color = (200, 200, 200)
+        elif not frontier:
+            action_text = "Validation Complete."
+            action_color = Colors.GOLD
+        else:
+            action_text = "Checking tile... no new unvisited neighbors."
+            action_color = (180, 180, 180)
+
+        hint = info_font.render(action_text, True, action_color)
+        self.screen.blit(hint, hint.get_rect(centerx=WINDOW_WIDTH // 2, top=35))
+
+        # Info panel below grid
+        panel_y = grid_y + viz_grid_px + 12
+        cx = WINDOW_WIDTH // 2
+
+        # Status text (Paused/Playing)
+        paused_text = "Paused" if self.bfs_paused else "Playing"
+        status_hint = info_font.render(f"[{paused_text}] (Space: play/pause, ←→: step)", True, Colors.WHITE)
+        self.screen.blit(status_hint, status_hint.get_rect(centerx=cx, top=panel_y))
+
+        # Stats row
+        panel_y += 25
+        info_rect = pygame.Rect(cx - 300, panel_y, 600, 80)
+        pygame.draw.rect(self.screen, Colors.DEEP, info_rect, border_radius=10)
+        pygame.draw.rect(self.screen, Colors.BORDER, info_rect, width=1, border_radius=10)
+
+        step_text = info_font.render(f"Step: {state['step']} / {len(self.bfs_trace) - 1}", True, Colors.WHITE)
+        queue_text = info_font.render(f"Queue size: {len(frontier)}", True, Colors.BLUE)
+        visited_text = info_font.render(f"Visited: {len(visited)}", True, (60, 100, 160))
+
+        target_names = []
+        for t in found:
+            if t in self.houses:
+                target_names.append(f"House {t}")
+            elif t == self.exit_pos:
+                target_names.append(f"Exit {t}")
+        found_str = ", ".join(target_names) if target_names else "None yet"
+        found_text = info_font.render(f"Targets found: {found_str}", True, Colors.GOLD)
+
+        self.screen.blit(step_text, (info_rect.left + 16, panel_y + 8))
+        self.screen.blit(queue_text, (info_rect.left + 220, panel_y + 8))
+        self.screen.blit(visited_text, (info_rect.left + 420, panel_y + 8))
+        self.screen.blit(found_text, (info_rect.left + 16, panel_y + 32))
+
+        # Legend
+        legend_y = panel_y + 55
+        legend_items = [
+            ((255, 220, 50), "Current"),
+            ((50, 220, 100), "New"),
+            ((40, 180, 180), "Queue"),
+            ((60, 100, 160), "Visited"),
+            ((200, 160, 40), "Found"),
+        ]
+        lx = info_rect.left + 16
+        for color, label in legend_items:
+            pygame.draw.rect(self.screen, color, (lx, legend_y, 14, 14), border_radius=3)
+            lbl = h_font.render(label, True, Colors.WHITE)
+            self.screen.blit(lbl, (lx + 18, legend_y + 1))
+            lx += 110
+
+        # Buttons
+        self.screen_mgr.render_bfs_viz_buttons(self.screen)
 
     def run(self):
         """Main game loop."""

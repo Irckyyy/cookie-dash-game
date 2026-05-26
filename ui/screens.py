@@ -350,10 +350,10 @@ class ScreenManager:
                 algo_y += 16
 
         # Buttons row using sprite buttons
-        btn_w, btn_h = 155, 48
-        btn_y = panel_rect.bottom + 20
-        btn_gap = 16
-        total_btn_w = 3 * btn_w + 2 * btn_gap
+        btn_w, btn_h = 130, 44
+        btn_y = panel_rect.bottom + 16
+        btn_gap = 12
+        total_btn_w = 4 * btn_w + 3 * btn_gap
         btn_start_x = cx - total_btn_w // 2
 
         # Menu button
@@ -364,18 +364,24 @@ class ScreenManager:
         self._review_rect = pygame.Rect(btn_start_x + btn_w + btn_gap, btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "view_maps", self._review_rect)
 
+        # BFS Check button
+        self._bfs_viz_rect = pygame.Rect(btn_start_x + 2 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
+        self._draw_button(surface, self._bfs_viz_rect, "BFS Check", primary=False)
+
         # Play Again button
-        self._again_rect = pygame.Rect(btn_start_x + 2 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
+        self._again_rect = pygame.Rect(btn_start_x + 3 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "play_again", self._again_rect)
 
     def handle_end_click(self, pos: tuple) -> str:
-        """Handle click on end screen. Returns 'title', 'game', 'review', or None."""
+        """Handle click on end screen. Returns 'title', 'game', 'review', 'bfs_viz', or None."""
         if self._menu_rect and self._menu_rect.collidepoint(pos):
             return "title"
         if self._again_rect and self._again_rect.collidepoint(pos):
             return "game"
         if self._review_rect and self._review_rect.collidepoint(pos):
             return "review"
+        if getattr(self, '_bfs_viz_rect', None) and self._bfs_viz_rect.collidepoint(pos):
+            return "bfs_viz"
         return None
 
     def render_review(self, surface: pygame.Surface, results: dict, speed_label: str = "1x"):
@@ -418,6 +424,26 @@ class ScreenManager:
             return "end"
         if getattr(self, '_review_speed_rect', None) and self._review_speed_rect.collidepoint(pos):
             return "speed"
+        return None
+
+    def render_bfs_viz_buttons(self, surface: pygame.Surface):
+        """Draw buttons for the BFS visualization screen."""
+        cx = WINDOW_WIDTH // 2
+        btn_y = WINDOW_HEIGHT - 60
+        btn_w, btn_h = 140, 42
+        
+        self._bfs_back_rect = pygame.Rect(cx - 150, btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "back", self._bfs_back_rect)
+        
+        self._bfs_restart_rect = pygame.Rect(cx + 10, btn_y, btn_w, btn_h)
+        self._draw_button(surface, self._bfs_restart_rect, "Restart", primary=False)
+
+    def handle_bfs_viz_click(self, pos: tuple) -> str:
+        """Handle click on BFS viz screen. Returns 'end', 'restart', or None."""
+        if getattr(self, '_bfs_back_rect', None) and self._bfs_back_rect.collidepoint(pos):
+            return "end"
+        if getattr(self, '_bfs_restart_rect', None) and self._bfs_restart_rect.collidepoint(pos):
+            return "restart"
         return None
 
     # ==================== STARS (fallback) ====================
