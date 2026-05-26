@@ -88,6 +88,12 @@ class HUD:
         # Delivery dots
         self._draw_delivery_dots(surface, hud_x + 110, y_offset + 22,
                                  human.deliveries)
+        # Delivery dots
+        self._draw_delivery_dots(surface, hud_x + 110, y_offset + 22,
+                                 human.deliveries)
+
+        # NEW: Draw human inventory
+        self._draw_inventory(surface, hud_x + 190, y_offset + 18, human)
 
         # === Center: Timer ===
         timer_text = format_time(elapsed)
@@ -122,6 +128,13 @@ class HUD:
         ai_emoji = self._title_font.render("🤖", True, Colors.TEXT)
         surface.blit(ai_emoji, (hud_x + max_w - 40, y_offset + 16))
 
+        # Delivery dots (right-aligned)
+        self._draw_delivery_dots(surface, hud_x + max_w - 182, y_offset + 22,
+                                 ai.deliveries)
+
+        # NEW: Draw AI inventory
+        self._draw_inventory(surface, hud_x + max_w - 256, y_offset + 18, ai)
+
     def render_log(self, surface: pygame.Surface, y_offset: int, max_height: int = 100):
         """Render the log panel below the grids."""
         max_w = min(900, WINDOW_WIDTH - 40)
@@ -153,3 +166,25 @@ class HUD:
             surface.blit(time_surf, (log_x + 12, cy))
             surface.blit(msg_surf, (log_x + 56, cy))
             cy += 18
+
+    def _draw_inventory(self, surface: pygame.Surface, x: int, y: int, player):
+            """Draw the player's active item inventory."""
+            # Box 1 (Boots)
+            box1_rect = pygame.Rect(x, y, 26, 26)
+            pygame.draw.rect(surface, Colors.DEEP, box1_rect, border_radius=6)
+            pygame.draw.rect(surface, Colors.BORDER, box1_rect, width=1, border_radius=6)
+
+            # Draw Boot emoji if the player has it
+            if player.has_boots:
+                boot_surf = self._val_font.render("👢", True, Colors.TEXT)
+                surface.blit(boot_surf, boot_surf.get_rect(center=box1_rect.center))
+
+            # Box 2 (Rope)
+            box2_rect = pygame.Rect(x + 32, y, 26, 26)
+            pygame.draw.rect(surface, Colors.DEEP, box2_rect, border_radius=6)
+            pygame.draw.rect(surface, Colors.BORDER, box2_rect, width=1, border_radius=6)
+
+            # Draw Rope emoji if the player has it
+            if player.has_rope:
+                rope_surf = self._val_font.render("🪢", True, Colors.TEXT)
+                surface.blit(rope_surf, rope_surf.get_rect(center=box2_rect.center))

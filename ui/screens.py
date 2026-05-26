@@ -380,6 +380,13 @@ class NotificationManager:
         self._duration = 2.5
         self._active = False
 
+    def show(self, msg: str, duration: float = 2.5):
+        """Show a notification message."""
+        self._message = msg
+        self._timer = 0.0
+        self._duration = duration
+        self._active = True    
+
     def _init_fonts(self):
         try:
             self._font = pygame.font.SysFont("segoeuisymbol", 16, bold=True)
