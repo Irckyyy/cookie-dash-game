@@ -63,6 +63,8 @@ class AIAgent:
         if not ai.has_rope:
             hazards.add(Tile.BROKEN)
 
+        known = getattr(ai, 'known_hazards', set())
+
         for avoid_hazards in [True, False]:
             visited = {start}
             queue = deque([(start, [start])])
@@ -76,8 +78,11 @@ class AIAgent:
                         tile = self.game_map[ny][nx]
                         if tile == Tile.WALL:
                             continue
-                        if avoid_hazards and tile in hazards:
-                            continue
+
+                        if avoid_hazards:
+                            if f"{nx},{ny}" in known or tile in hazards:
+                                continue
+
                         visited.add((nx, ny))
                         queue.append(((nx, ny), path + [(nx, ny)]))
         return []
@@ -95,17 +100,26 @@ class AIAgent:
             if safe:
                 neighbors = safe
 
-        # Filter out pruned tiles
-        available = [n for n in neighbors if f"{n[0]},{n[1]}" not in ai.memory_pruned]
+        known = getattr(ai, 'known_hazards', set())
+        available = [n for n in neighbors if f"{n[0]},{n[1]}" not in ai.memory_pruned and f"{n[0]},{n[1]}" not in known]
+
         if not available:
             ai.memory_pruned.clear()
-            available = neighbors
+            # Try again, but STILL avoid permanent hazards
+            available = [n for n in neighbors if f"{n[0]},{n[1]}" not in known]
+            if not available:
+                available = neighbors
         neighbors = available
 
         # Sort by distance to target
         sorted_n = sorted(neighbors, key=lambda n: manhattan(n, target))
 
         reason = ""
+
+        if difficulty == Difficulty.EASY and random.random() < 0.3 and neighbors:
+            chosen = random.choice(neighbors)
+            reason = "Stochastic behavior: randomly picked neighbor."
+            return chosen, reason
 
         # Prefer not going back to last position
         last_key = f"{ai.last_pos[0]},{ai.last_pos[1]}" if ai.last_pos else None
@@ -135,18 +149,30 @@ class AIAgent:
         ai = self.player
         if ai.finished:
             return []
+        
+        if not hasattr(ai, 'known_hazards'):
+            ai.known_hazards = set()
 
         goals = self.get_goals()
-        target = goals[0]
+        prev = getattr(self, '_prev_target', None)
+        if prev in goals:
+            target = prev
+        else:
+            target = goals[0] # Pick the closest house to start
         
-        # If target dynamically changed (e.g. wandered closer to a different house)
-        if getattr(self, '_prev_target', None) != target:
+        # If the target changed (because we just delivered a cookie to the old one)
+        if prev != target:
             self._best_dist = None
             self._no_progress_count = 0
             self._bfs_path.clear()
             ai.memory_visited.clear()
             ai.memory_pruned.clear()
+            
             self._prev_target = target
+
+        ai.step_timer += 1
+        if difficulty == Difficulty.EASY and ai.step_timer % 10 == 0:
+            ai.memory_pruned.clear()
 
         px, py = ai.pos
         all_neighbors = self._get_all_neighbors(px, py)
@@ -164,7 +190,7 @@ class AIAgent:
 
         # Decide: use greedy exploration or BFS fallback
         # Easy mode triggers BFS sooner since randomness causes more wandering
-        bfs_threshold = 8 if difficulty == Difficulty.EASY else 12
+        bfs_threshold = 15 if difficulty == Difficulty.EASY else 20
         use_bfs = self._no_progress_count >= bfs_threshold
 
         if use_bfs or self._bfs_path:
@@ -266,6 +292,7 @@ class AIAgent:
             ai.score -= 150
             ai.penalty_count["puddle"] += 1
             ai.memory_pruned.add(key)
+            ai.known_hazards.add(key)
             self._bfs_path.clear()  # Invalidate BFS path after revert
             ai.revert_steps(2)
             self.replay_log.append({
@@ -289,6 +316,7 @@ class AIAgent:
             ai.score -= 200
             ai.penalty_count["broken"] += 1
             ai.memory_pruned.add(key)
+            ai.known_hazards.add(key)
             self._bfs_path.clear()  # Invalidate BFS path after revert
             ai.revert_steps(3)
             self.replay_log.append({
