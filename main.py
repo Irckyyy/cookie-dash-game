@@ -219,8 +219,24 @@ class Game:
     def _end_game(self):
         """End the game and calculate results."""
         self.game_over = True
+        
+        # Lock in the official results 
         difficulty = self.screen_mgr.selected_difficulty
         self.results = calculate_results(self.human, self.ai_player, self.elapsed, difficulty)
+
+        # Auto-complete the AI's path for the Replay
+        if not self.ai_player.finished and self.ai_agent:
+            safeguard = 0
+            # Fast-forward the AI instantly (max 500 steps to prevent freezing)
+            while not self.ai_player.finished and safeguard < 500:
+                self.ai_agent.step(difficulty, {"elapsed": self.elapsed})
+                safeguard += 1
+                
+            # Tag the final frame so the Replay screen explains what happened
+            if self.ai_agent.replay_log:
+                self.ai_agent.replay_log[-1]['state'] = "Ghost Path (Auto-Completed)"
+                self.ai_agent.replay_log[-1]['reason'] = "You won! This is the path it would have taken."
+
         # Short delay before showing end screen
         self._end_delay = 1.0
 
@@ -296,7 +312,6 @@ class Game:
                 self.bfs_anim_timer = 0.0
                 self.bfs_paused = False
 
-        # ---> ONLY PLAY SOUND IF A BUTTON WAS ACTUALLY CLICKED <---
         if button_clicked and getattr(self, 'sfx_click', None):
             self.sfx_click.play()
 
