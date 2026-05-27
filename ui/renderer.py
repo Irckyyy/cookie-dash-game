@@ -27,13 +27,21 @@ class GridRenderer:
         self._ai_facing = "down"
 
     def _init_fonts(self):
+        font_path = "assets/fonts/PressStart2P-Regular.ttf"
         try:
-            self._small_font = pygame.font.SysFont("segoeuisymbol", 12)
-            self._symbol_font = pygame.font.SysFont("segoeuisymbol", 18, bold=True)
+            self._small_font = pygame.font.Font(font_path, 8)
+            self._symbol_font = pygame.font.Font(font_path, 12)
+        except Exception:
+            try:
+                self._small_font = pygame.font.SysFont("segoeuisymbol", 12)
+                self._symbol_font = pygame.font.SysFont("segoeuisymbol", 18, bold=True)
+            except Exception:
+                self._small_font = pygame.font.Font(None, 14)
+                self._symbol_font = pygame.font.Font(None, 20)
+
+        try:
             self._emoji_font = pygame.font.SysFont("segoeuisymbol", 24)
         except Exception:
-            self._small_font = pygame.font.Font(None, 14)
-            self._symbol_font = pygame.font.Font(None, 20)
             self._emoji_font = pygame.font.Font(None, 26)
 
     def _get_direction_from_delta(self, dx: int, dy: int) -> str:

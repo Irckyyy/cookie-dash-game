@@ -23,18 +23,26 @@ class HUD:
         self.log_entries = []   # list of (time_str, msg, log_type)
 
     def _init_fonts(self):
+        font_path = "assets/fonts/PressStart2P-Regular.ttf"
         try:
-            self._title_font = pygame.font.SysFont("segoeuisymbol", 22, bold=True)
-            self._val_font = pygame.font.SysFont("segoeuisymbol", 18, bold=True)
-            self._label_font = pygame.font.SysFont("segoeuisymbol", 13)
-            self._timer_font = pygame.font.SysFont("segoeuisymbol", 32, bold=True)
-            self._log_font = pygame.font.SysFont("segoeuisymbol", 12)
+            self._title_font = pygame.font.Font(font_path, 14)
+            self._val_font = pygame.font.Font(font_path, 12)
+            self._label_font = pygame.font.Font(font_path, 8)
+            self._timer_font = pygame.font.Font(font_path, 20)
+            self._log_font = pygame.font.Font(font_path, 8)
         except Exception:
-            self._title_font = pygame.font.Font(None, 24)
-            self._val_font = pygame.font.Font(None, 20)
-            self._label_font = pygame.font.Font(None, 15)
-            self._timer_font = pygame.font.Font(None, 34)
-            self._log_font = pygame.font.Font(None, 14)
+            try:
+                self._title_font = pygame.font.SysFont("segoeuisymbol", 22, bold=True)
+                self._val_font = pygame.font.SysFont("segoeuisymbol", 18, bold=True)
+                self._label_font = pygame.font.SysFont("segoeuisymbol", 13)
+                self._timer_font = pygame.font.SysFont("segoeuisymbol", 32, bold=True)
+                self._log_font = pygame.font.SysFont("segoeuisymbol", 12)
+            except Exception:
+                self._title_font = pygame.font.Font(None, 24)
+                self._val_font = pygame.font.Font(None, 20)
+                self._label_font = pygame.font.Font(None, 15)
+                self._timer_font = pygame.font.Font(None, 34)
+                self._log_font = pygame.font.Font(None, 14)
 
     def add_log(self, time_str: str, msg: str, log_type: str = "system"):
         """Add a log entry."""

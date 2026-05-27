@@ -44,22 +44,26 @@ class ScreenManager:
         self._sky_surface = None
 
     def _init_fonts(self):
+        font_path = "assets/fonts/PressStart2P-Regular.ttf"
         try:
-            self._big_font = pygame.font.SysFont("segoeuisymbol", 72)
-            self._title_font = pygame.font.SysFont("segoeuisymbol", 42, bold=True)
-            self._btn_font = pygame.font.SysFont("segoeuisymbol", 20, bold=True)
-            self._sub_font = pygame.font.SysFont("segoeuisymbol", 14)
-            self._small_font = pygame.font.SysFont("segoeuisymbol", 12)
-            self._emoji_big = pygame.font.SysFont("segoeuisymbol", 56)
-            self._stat_font = pygame.font.SysFont("segoeuisymbol", 24, bold=True)
+            self._big_font = pygame.font.Font(font_path, 48)
+            self._title_font = pygame.font.Font(font_path, 24)
+            self._btn_font = pygame.font.Font(font_path, 12)
+            self._sub_font = pygame.font.Font(font_path, 10)
+            self._small_font = pygame.font.Font(font_path, 8)
+            self._stat_font = pygame.font.Font(font_path, 16)
         except Exception:
             self._big_font = pygame.font.Font(None, 74)
             self._title_font = pygame.font.Font(None, 44)
             self._btn_font = pygame.font.Font(None, 22)
             self._sub_font = pygame.font.Font(None, 16)
             self._small_font = pygame.font.Font(None, 14)
-            self._emoji_big = pygame.font.Font(None, 58)
             self._stat_font = pygame.font.Font(None, 26)
+
+        try:
+            self._emoji_big = pygame.font.SysFont("segoeuisymbol", 56)
+        except Exception:
+            self._emoji_big = pygame.font.Font(None, 58)
 
     def _draw_sky_background(self, surface: pygame.Surface):
         """Draw the pixel-art sky background (Frame 1), scaled to fill the window."""
@@ -485,10 +489,14 @@ class NotificationManager:
         self._active = True    
 
     def _init_fonts(self):
+        font_path = "assets/fonts/PressStart2P-Regular.ttf"
         try:
-            self._font = pygame.font.SysFont("segoeuisymbol", 16, bold=True)
+            self._font = pygame.font.Font(font_path, 10)
         except Exception:
-            self._font = pygame.font.Font(None, 18)
+            try:
+                self._font = pygame.font.SysFont("segoeuisymbol", 16, bold=True)
+            except Exception:
+                self._font = pygame.font.Font(None, 18)
 
     def update(self, dt: float):
         """Update notification timer."""
