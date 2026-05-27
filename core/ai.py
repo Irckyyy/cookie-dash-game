@@ -40,6 +40,9 @@ class AIAgent:
                 goals.append(h)
         if not goals:
             goals.append(self.exit_pos)
+        else:
+            # Sort remaining houses by distance to current position to avoid skipping nearby ones
+            goals.sort(key=lambda h: manhattan(ai.pos, h))
         return goals
 
     def _get_all_neighbors(self, px, py):
@@ -103,15 +106,6 @@ class AIAgent:
         sorted_n = sorted(neighbors, key=lambda n: manhattan(n, target))
 
         reason = ""
-        # Easy mode: slight randomness
-        if difficulty == Difficulty.EASY:
-            if random.random() < 0.15 and len(sorted_n) > 1:
-                top2 = sorted_n[:2]
-                sorted_n = [random.choice(top2)] + [n for n in sorted_n if n not in top2]
-                reason = "Stochastic: picked from top neighbors."
-            ai.step_timer += 1
-            if ai.step_timer % 15 == 0:
-                ai.memory_pruned.clear()
 
         # Prefer not going back to last position
         last_key = f"{ai.last_pos[0]},{ai.last_pos[1]}" if ai.last_pos else None
@@ -144,6 +138,16 @@ class AIAgent:
 
         goals = self.get_goals()
         target = goals[0]
+        
+        # If target dynamically changed (e.g. wandered closer to a different house)
+        if getattr(self, '_prev_target', None) != target:
+            self._best_dist = None
+            self._no_progress_count = 0
+            self._bfs_path.clear()
+            ai.memory_visited.clear()
+            ai.memory_pruned.clear()
+            self._prev_target = target
+
         px, py = ai.pos
         all_neighbors = self._get_all_neighbors(px, py)
 
@@ -204,6 +208,28 @@ class AIAgent:
                     reason = "Stuck! Will use BFS next step."
             else:
                 ai.stuck_counter = 0
+
+        # Handle failsafe cooldown
+        if getattr(self, '_failsafe_cooldown', 0) > 0:
+            self._failsafe_cooldown -= 1
+
+        # Anti-oscillation failsafe (uses replay_log because path_history truncates on hazards)
+        elif len(self.replay_log) >= 8:
+            recent_positions = [entry['pos'] for entry in self.replay_log[-8:]]
+            if len(set(recent_positions)) <= 4:
+                # The AI has been bouncing in a small loop for 8 steps.
+                # Force a random move to break the loop!
+                unvisited = [n for n in all_neighbors if n not in set(recent_positions)]
+                if unvisited:
+                    chosen = random.choice(unvisited)
+                else:
+                    chosen = random.choice(all_neighbors)
+                ai.memory_pruned.clear()
+                ai.memory_visited.clear()
+                self._bfs_path.clear()
+                self._no_progress_count = 999  # Force BFS after jumping out
+                self._failsafe_cooldown = 8    # Don't trigger failsafe again for 8 steps!
+                reason = "Failsafe: Broke out of oscillation loop."
 
         nx, ny = chosen
         tile_type = self.game_map[ny][nx]
