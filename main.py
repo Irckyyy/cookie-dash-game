@@ -35,12 +35,44 @@ class Game:
 
     def __init__(self):
         pygame.init()
+        pygame.mixer.init()
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption(GAME_TITLE)
         self.clock = pygame.time.Clock()
 
         # Load all sprite assets (must happen after display init)
         assets.load_all(TILE_SIZE)
+
+        try:
+            pygame.mixer.music.load("assets/sounds/MainMenu Music.wav")
+            pygame.mixer.music.set_volume(0.1)
+            pygame.mixer.music.play(-1)  # Loop indefinitely
+
+            self.sfx_click = pygame.mixer.Sound("assets/sounds/click button.wav")
+            self.sfx_click.set_volume(0.3)
+
+            self.sfx_delivery = pygame.mixer.Sound("assets/sounds/successDel5.wav")
+            self.sfx_delivery.set_volume(0.3)
+
+            self.sfx_exit = pygame.mixer.Sound("assets/sounds/exit.wav")
+            self.sfx_exit.set_volume(0.4)
+
+            self.sfx_road = pygame.mixer.Sound("assets/sounds/hit road.wav")
+            self.sfx_road.set_volume(0.3)
+
+            self.sfx_puddle = pygame.mixer.Sound("assets/sounds/puddle.wav")
+            self.sfx_puddle.set_volume(0.3)
+
+            self.sfx_win = pygame.mixer.Sound("assets/sounds/winner.wav")
+            self.sfx_win.set_volume(0.15)
+
+            self.sfx_lose = pygame.mixer.Sound("assets/sounds/lose.wav")
+            self.sfx_lose.set_volume(0.5)
+
+            self
+
+        except Exception as e:
+            print(f"Error loading music: {e}")  
 
         # UI components
         self.grid_renderer = GridRenderer()
@@ -132,11 +164,29 @@ class Game:
                 self.hud.add_log(format_time(self.elapsed),
                                  event.get("log", ""),
                                  event.get("log_type", "system"))
-                
-            if event["type"] == "penalty" and event.get("log_type") != "ai":
-                self.shake_timer = 0.3  # seconds to shake screen
 
-            if event["type"] == "finish":
+            # Delivery
+            if event["type"] == "delivery":
+                if event.get("log_type") != "ai" and getattr(self, 'sfx_delivery', None):
+                    self.sfx_delivery.play()
+
+            # Penatly
+            elif event["type"] == "penalty":
+                # We only play damage sounds and shake the screen for the Human player
+                if event.get("log_type") != "ai":
+                    msg = event.get("msg", "").lower()
+                    
+                    if "puddle" in msg and getattr(self, 'sfx_puddle', None):
+                        self.sfx_puddle.play()
+                    elif "broken" in msg and getattr(self, 'sfx_road', None):
+                        self.sfx_road.play()
+                        
+                    self.shake_timer = 0.3  # seconds to shake screen
+
+            # Exit
+            elif event["type"] == "finish":
+                if event.get("log_type") != "ai" and getattr(self, 'sfx_exit', None):
+                    self.sfx_exit.play()
                 self._check_game_over()
 
     def _check_game_over(self):
@@ -155,6 +205,12 @@ class Game:
         if not self.final_countdown:
             self.final_countdown = True
             self.final_countdown_timer = 0.0
+            
+            if h_done and getattr(self, 'sfx_win', None):
+                self.sfx_win.play()
+            elif a_done and getattr(self, 'sfx_lose', None):
+                self.sfx_lose.play()
+
             winner = "You" if h_done else "AI"
             self.hud.add_log(format_time(self.elapsed),
                              f"{winner} finished! Game ending in 2 seconds...",
@@ -183,13 +239,19 @@ class Game:
 
     def _handle_click(self, pos):
         """Route clicks to the active screen."""
+        button_clicked = False  # Track if a valid button was pressed
+
         if self.state == self.TITLE:
             result = self.screen_mgr.handle_title_click(pos)
+            if result:
+                button_clicked = True
             if result == "difficulty":
                 self.state = self.DIFFICULTY
 
         elif self.state == self.DIFFICULTY:
             result = self.screen_mgr.handle_difficulty_click(pos)
+            if result:
+                button_clicked = True
             if result == "game":
                 self.start_game()
             elif result == "title":
@@ -197,6 +259,8 @@ class Game:
 
         elif self.state == self.END:
             result = self.screen_mgr.handle_end_click(pos)
+            if result:
+                button_clicked = True
             if result == "title":
                 self.state = self.TITLE
             elif result == "game":
@@ -214,6 +278,8 @@ class Game:
 
         elif self.state == self.REVIEW:
             result = self.screen_mgr.handle_review_click(pos)
+            if result:
+                button_clicked = True
             if result == "end":
                 self.state = self.END
             elif result == "speed":
@@ -221,12 +287,18 @@ class Game:
 
         elif self.state == self.BFS_VIZ:
             result = self.screen_mgr.handle_bfs_viz_click(pos)
+            if result:
+                button_clicked = True
             if result == "end":
                 self.state = self.END
             elif result == "restart":
                 self.bfs_anim_index = 0
                 self.bfs_anim_timer = 0.0
                 self.bfs_paused = False
+
+        # ---> ONLY PLAY SOUND IF A BUTTON WAS ACTUALLY CLICKED <---
+        if button_clicked and getattr(self, 'sfx_click', None):
+            self.sfx_click.play()
 
     def _handle_key(self, key):
         """Handle keyboard input during gameplay."""
