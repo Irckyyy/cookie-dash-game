@@ -27,11 +27,14 @@ class Game:
 
     # Screen states
     TITLE      = "title"
+    INTRO      = "intro"
     DIFFICULTY = "difficulty"
     PLAYING    = "game"
     END        = "end"
-    REVIEW     = "review"
+    REVIEW     = "review"   
     BFS_VIZ    = "bfs_viz"
+    OPTIONS    = "options"
+    CREDITS    = "credits"
 
     def __init__(self):
         pygame.init()
@@ -69,7 +72,8 @@ class Game:
             self.sfx_lose = pygame.mixer.Sound("assets/sounds/lose.wav")
             self.sfx_lose.set_volume(0.5)
 
-            self
+            self.sfx_bfs = pygame.mixer.Sound("assets/sounds/bfsclick.mp3")
+            self.sfx_bfs.set_volume(0.3)
 
         except Exception as e:
             print(f"Error loading music: {e}")  
@@ -100,6 +104,10 @@ class Game:
         self.review_speed_idx = 1
         self.notif = NotificationManager()
 
+        self.bfs_anim_index = 0
+        self.bfs_anim_timer = 0.0
+        self.bfs_paused = False
+
         # Timers
         self._second_timer = 0.0
         self._ai_timer = 0.0
@@ -107,7 +115,25 @@ class Game:
 
         self.shake_timer = 0.0
 
+        self.state = self.TITLE
+        self.current_intro_slide = 2
+        self.story_already_viewed = False 
+        self.master_volume = 10
+
         self.running = True
+
+    def set_volume(self, volume: int):
+        """Dynamically adjusts the master volume of all game sounds."""
+        self.master_volume = max(0, min(100, volume))
+        v = self.master_volume / 100.0
+        try:
+            pygame.mixer.music.set_volume(0.2 * v)
+            for sfx in ['sfx_click', 'sfx_delivery', 'sfx_exit', 'sfx_road', 'sfx_puddle', 'sfx_win', 'sfx_lose', 'sfx_scan']:
+                s = getattr(self, sfx, None)
+                if s:
+                    s.set_volume(0.8 * v)
+        except Exception:
+            pass
 
     def start_game(self):
         """Initialize a new game session."""
@@ -255,22 +281,67 @@ class Game:
 
     def _handle_click(self, pos):
         """Route clicks to the active screen."""
-        button_clicked = False  # Track if a valid button was pressed
+        # Initialize the variable at the top so it always exists!
+        button_clicked = False
 
         if self.state == self.TITLE:
             result = self.screen_mgr.handle_title_click(pos)
             if result:
-                button_clicked = True
+                button_clicked = True  # Play sound if a button was clicked
             if result == "difficulty":
+                # ---> CHANGED: Go to intro deck if unread, otherwise skip to settings
+                if not getattr(self, 'story_already_viewed', False):
+                    self.state = "intro"
+                    self.current_intro_slide = 2
+                else:
+                    self.state = self.DIFFICULTY
+            elif result == "quit":
+                self.running = False
+            elif result == "options":
+                self.state = self.OPTIONS
+            elif result == "credits":
+                self.state = self.CREDITS
+
+        # ---> NEW: HANDOFF MOUSE INTERACTIONS DURING THE INTRO
+        elif self.state == "intro":
+            result = self.screen_mgr.handle_intro_click(pos, self.current_intro_slide)
+            if result:
+                button_clicked = True
+            if result == "next_slide":
+                self.current_intro_slide += 1
+            elif result == "start_difficulty":
+                self.story_already_viewed = True  # Mark it read so it only shows once!
                 self.state = self.DIFFICULTY
 
         elif self.state == self.DIFFICULTY:
             result = self.screen_mgr.handle_difficulty_click(pos)
-            if result:
+            
+            # Check if a card was clicked to play sound on difficulty cards
+            card_clicked = any(rect.collidepoint(pos) for rect in self.screen_mgr._diff_rects.values())
+            if result or card_clicked:
                 button_clicked = True
+                
             if result == "game":
                 self.start_game()
             elif result == "title":
+                self.state = self.TITLE
+
+        elif self.state == self.OPTIONS:
+            result = self.screen_mgr.handle_options_click(pos)
+            if result:
+                button_clicked = True
+            if result == "back":
+                self.state = self.TITLE
+            elif result == "voldown":
+                self.set_volume(self.master_volume - 10)
+            elif result == "volup":
+                self.set_volume(self.master_volume + 10)
+
+        elif self.state == self.CREDITS:
+            result = self.screen_mgr.handle_credits_click(pos)
+            if result:
+                button_clicked = True
+            if result == "back":
                 self.state = self.TITLE
 
         elif self.state == self.END:
@@ -284,12 +355,10 @@ class Game:
             elif result == "review":
                 self.state = self.REVIEW
                 self.review_anim_index = 1
-                self.review_anim_timer = 0.0
                 self.review_paused = True
             elif result == "bfs_viz":
                 self.state = self.BFS_VIZ
                 self.bfs_anim_index = 0
-                self.bfs_anim_timer = 0.0
                 self.bfs_paused = False
 
         elif self.state == self.REVIEW:
@@ -313,10 +382,19 @@ class Game:
                 self.bfs_paused = False
 
         if button_clicked and getattr(self, 'sfx_click', None):
-            self.sfx_click.play()
+            self.sfx_click.play()  
 
     def _handle_key(self, key):
         """Handle keyboard input during gameplay."""
+
+        if self.state == self.INTRO:
+            if key == pygame.K_SPACE:
+                self.story_already_viewed = True
+                self.state = self.DIFFICULTY
+                if getattr(self, 'sfx_click', None):
+                    self.sfx_click.play()
+            return
+
         if self.state == self.BFS_VIZ:
             if key == pygame.K_SPACE:
                 self.bfs_paused = not self.bfs_paused
@@ -385,6 +463,10 @@ class Game:
                     self.bfs_anim_timer -= 0.08
                     if self.bfs_anim_index < len(self.bfs_trace) - 1:
                         self.bfs_anim_index += 1
+
+                        if getattr(self, 'sfx_bfs', None):
+                            self.sfx_bfs.play()
+                            
                     else:
                         self.bfs_paused = True
             return
@@ -441,6 +523,18 @@ class Game:
 
         if self.state == self.TITLE:
             self.screen_mgr.render_title(self.screen, dt)
+
+        elif self.state == self.INTRO:
+            self.screen_mgr.render_intro(self.screen, self.current_intro_slide)
+
+        elif self.state == self.OPTIONS:
+            self.screen_mgr.render_options(self.screen, self.master_volume)
+
+        elif self.state == self.CREDITS:
+            self.screen_mgr.render_credits(self.screen)
+
+        elif self.state == self.DIFFICULTY:
+            self.screen_mgr.render_difficulty(self.screen)
 
         elif self.state == self.DIFFICULTY:
             self.screen_mgr.render_difficulty(self.screen)
