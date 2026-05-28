@@ -8,7 +8,7 @@ import pygame
 from setting import (
     Colors, Tile, GRID_PX, SIZE, TILE_SIZE, TILE_GAP, GRID_PADDING
 )
-from utils.helper import manhattan
+from utils.helper import manhattan, resource_path
 from ui.assets import assets
 
 
@@ -27,7 +27,7 @@ class GridRenderer:
         self._ai_facing = "down"
 
     def _init_fonts(self):
-        font_path = "assets/fonts/PressStart2P-Regular.ttf"
+        font_path = resource_path("assets/fonts/PressStart2P-Regular.ttf")
         try:
             self._small_font = pygame.font.Font(font_path, 8)
             self._symbol_font = pygame.font.Font(font_path, 12)

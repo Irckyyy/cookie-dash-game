@@ -18,7 +18,7 @@ from ui.renderer import GridRenderer
 from ui.hud import HUD
 from ui.screens import ScreenManager, NotificationManager
 from variants.scoring import calculate_results
-from utils.helper import format_time
+from utils.helper import format_time, resource_path
 from ui.assets import assets
 
 
@@ -47,32 +47,32 @@ class Game:
         assets.load_all(TILE_SIZE)
 
         try:
-            pygame.mixer.music.load("assets/sounds/MainMenu Music.wav")
+            pygame.mixer.music.load(resource_path("assets/sounds/MainMenu Music.wav"))
             pygame.mixer.music.set_volume(0.1)
             pygame.mixer.music.play(-1)  # Loop indefinitely
 
-            self.sfx_click = pygame.mixer.Sound("assets/sounds/click button.wav")
+            self.sfx_click = pygame.mixer.Sound(resource_path("assets/sounds/click button.wav"))
             self.sfx_click.set_volume(0.3)
 
-            self.sfx_delivery = pygame.mixer.Sound("assets/sounds/successDel5.wav")
+            self.sfx_delivery = pygame.mixer.Sound(resource_path("assets/sounds/successDel5.wav"))
             self.sfx_delivery.set_volume(0.3)
 
-            self.sfx_exit = pygame.mixer.Sound("assets/sounds/exit.wav")
+            self.sfx_exit = pygame.mixer.Sound(resource_path("assets/sounds/exit.wav"))
             self.sfx_exit.set_volume(0.4)
 
-            self.sfx_road = pygame.mixer.Sound("assets/sounds/hit road.wav")
+            self.sfx_road = pygame.mixer.Sound(resource_path("assets/sounds/hit road.wav"))
             self.sfx_road.set_volume(0.3)
 
-            self.sfx_puddle = pygame.mixer.Sound("assets/sounds/puddle.wav")
+            self.sfx_puddle = pygame.mixer.Sound(resource_path("assets/sounds/puddle.wav"))
             self.sfx_puddle.set_volume(0.3)
 
-            self.sfx_win = pygame.mixer.Sound("assets/sounds/winner.wav")
+            self.sfx_win = pygame.mixer.Sound(resource_path("assets/sounds/winner.wav"))
             self.sfx_win.set_volume(0.15)
 
-            self.sfx_lose = pygame.mixer.Sound("assets/sounds/lose.wav")
+            self.sfx_lose = pygame.mixer.Sound(resource_path("assets/sounds/lose.wav"))
             self.sfx_lose.set_volume(0.5)
 
-            self.sfx_bfs = pygame.mixer.Sound("assets/sounds/bfsclick.mp3")
+            self.sfx_bfs = pygame.mixer.Sound(resource_path("assets/sounds/bfsclick.mp3"))
             self.sfx_bfs.set_volume(0.3)
 
         except Exception as e:

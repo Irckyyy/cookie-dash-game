@@ -43,6 +43,9 @@ class AssetLoader:
         self._load_ui_assets()
         self._loaded = True
 
+    def get(self, key: str, default=None):
+        return self._cache.get(key, default)
+
     # ─── tile getters ─────────────────────────────────────────────────
 
     @property
@@ -236,6 +239,15 @@ class AssetLoader:
 
     def _load_player_sprites(self, tile_size: int):
         """Slice the 2×2 delivery_man sprite sheet into 4 directional poses."""
+        
+        # Also quickly load credit images while we are at it
+        credits_dir = os.path.join(_BASE_DIR, "credits")
+        for char in ["boy", "girl", "ai"]:
+            path = os.path.join(credits_dir, f"{char}.png")
+            if os.path.exists(path):
+                img = self._load_image(path)
+                self._cache[f"cred_{char}"] = pygame.transform.smoothscale(img, (120, 120))
+
         path = os.path.join(_SPRITES_DIR, "delivery_man.png")
         if not os.path.exists(path):
             return

@@ -11,7 +11,7 @@ echo.
 echo Building executable with PyInstaller...
 echo.
 
-pyinstaller --onefile --windowed --name "CookieDash" --icon=NUL main.py
+pyinstaller --onefile --windowed --add-data "assets;assets" --name "CookieDash" main.py
 
 echo.
 echo ========================================

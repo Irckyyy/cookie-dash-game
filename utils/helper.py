@@ -4,6 +4,19 @@ Translated from formatTime() and manhattan() in the HTML source.
 """
 
 
+import sys
+import os
+
+def resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and for PyInstaller onefile bundles."""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # When running normally, project root is one level up from utils
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
 def format_time(seconds: int) -> str:
     """Format seconds into M:SS string (matches JS formatTime)."""
     minutes = seconds // 60

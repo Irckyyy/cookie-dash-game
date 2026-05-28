@@ -6,7 +6,7 @@ Now uses the pixel-art status bar background and icon sprites.
 
 import pygame
 from setting import Colors, DELIVERIES_NEEDED, WINDOW_WIDTH
-from utils.helper import format_time
+from utils.helper import format_time, resource_path
 from ui.assets import assets
 
 
@@ -23,7 +23,7 @@ class HUD:
         self.log_entries = []   # list of (time_str, msg, log_type)
 
     def _init_fonts(self):
-        font_path = "assets/fonts/PressStart2P-Regular.ttf"
+        font_path = resource_path("assets/fonts/PressStart2P-Regular.ttf")
         try:
             self._title_font = pygame.font.Font(font_path, 14)
             self._val_font = pygame.font.Font(font_path, 12)

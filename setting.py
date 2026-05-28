@@ -9,7 +9,7 @@ import pygame
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 760
 FPS = 60
-GAME_TITLE = "🍪 Girl Scout Cookie Night Delivery Dash"
+GAME_TITLE = "Cookie Delivery Dash"
 
 # ======================== GRID ========================
 SIZE = 10          # 10×10 grid

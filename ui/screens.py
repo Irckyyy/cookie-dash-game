@@ -10,6 +10,7 @@ from setting import (
     Difficulty, DIFFICULTY_CONFIG,
 )
 from ui.assets import assets
+from utils.helper import resource_path
 
 
 class ScreenManager:
@@ -23,6 +24,7 @@ class ScreenManager:
         self._small_font = None
         self._emoji_big = None
         self._stat_font = None
+        self._cred_font = None
         self._init_fonts()
 
         # State
@@ -44,7 +46,7 @@ class ScreenManager:
         self._sky_surface = None
 
     def _init_fonts(self):
-        font_path = "assets/fonts/PressStart2P-Regular.ttf"
+        font_path = resource_path("assets/fonts/PressStart2P-Regular.ttf")
         try:
             self._big_font = pygame.font.Font(font_path, 48)
             self._title_font = pygame.font.Font(font_path, 24)
@@ -52,6 +54,7 @@ class ScreenManager:
             self._sub_font = pygame.font.Font(font_path, 10)
             self._small_font = pygame.font.Font(font_path, 8)
             self._stat_font = pygame.font.Font(font_path, 16)
+            self._cred_font = pygame.font.Font(font_path, 10)
         except Exception:
             self._big_font = pygame.font.Font(None, 74)
             self._title_font = pygame.font.Font(None, 44)
@@ -59,6 +62,7 @@ class ScreenManager:
             self._sub_font = pygame.font.Font(None, 16)
             self._small_font = pygame.font.Font(None, 14)
             self._stat_font = pygame.font.Font(None, 26)
+            self._cred_font = pygame.font.Font(None, 18)
 
         try:
             self._emoji_big = pygame.font.SysFont("segoeuisymbol", 56)
@@ -310,7 +314,7 @@ class ScreenManager:
         self._draw_sky_background(surface)
         cx, cy = WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2
 
-        panel_rect = pygame.Rect(cx - 260, cy - 200, 520, 380)
+        panel_rect = pygame.Rect(cx - 350, cy - 280, 700, 560)
         if hasattr(self, '_draw_main_panel'):
             self._draw_main_panel(surface, panel_rect)
         else:
@@ -318,29 +322,56 @@ class ScreenManager:
             pygame.draw.rect(surface, Colors.GOLD, panel_rect, width=4, border_radius=6)
 
         title = self._title_font.render("CREDITS", True, Colors.GOLD)
-        surface.blit(title, title.get_rect(centerx=cx, centery=panel_rect.top + 40))
+        surface.blit(title, title.get_rect(centerx=cx, centery=panel_rect.top + 45))
 
-        # UPDATED: Your Full Development Team Group
-        credits_text = [
-            "Cookie Delivery Dash",
-            "",
-            "Developed by:",
-            "Phillip Dylan Garcia",
-            "John Eric Samillano",
-            "Clarissa May Alejandro",
-            "Krisdel Ybañez",  # Used the proper 'ñ' character for Yñiguez
-            "",
-            "Intro to Artificial Intelligence",
-            "Case Study 1"
+        # UPDATED: Assigned specific roles based on user input, and separate roles from names
+        credits_list = [
+            ("Cookie Delivery Dash", Colors.GOLD),
+            ("", Colors.WHITE),
+            ("Lead Programmers & AI Logic:", (150, 200, 255)),
+            ("Phillip Dylan Garcia", Colors.WHITE),
+            ("John Eric Samillano", Colors.WHITE),
+            ("", Colors.WHITE),
+            ("Lead Artist & Asset Curation:", (150, 200, 255)),
+            ("Clarissa May Alejandro", Colors.WHITE),
+            ("", Colors.WHITE),
+            ("Game Concept, QA & Testing:", (150, 200, 255)),
+            ("Krisdel Ybañez", Colors.WHITE),
+            ("", Colors.WHITE),
+            ("Intro to Artificial Intelligence", (210, 190, 150)),
+            ("Case Study 1", (210, 190, 150))
         ]
 
-        # Lowered line spacing slightly (from 25 to 22) so 
-        # all 4 names fit beautifully inside the panel!
-        y_offset = panel_rect.top + 95
-        for line in credits_text:
-            text = self._small_font.render(line, True, (210, 190, 150))
+        y_offset = panel_rect.top + 80
+        for line, color in credits_list:
+            text = self._cred_font.render(line, True, color)
+            # Add a slight shadow for depth
+            shadow = self._cred_font.render(line, True, (40, 40, 60))
+            surface.blit(shadow, shadow.get_rect(centerx=cx + 2, top=y_offset + 2))
             surface.blit(text, text.get_rect(centerx=cx, top=y_offset))
-            y_offset += 22
+            y_offset += 26
+
+        # Draw floating animated assets on the sides!
+        import math
+        time_ms = pygame.time.get_ticks()
+        float_y1 = math.sin(time_ms / 400.0) * 10
+        float_y2 = math.cos(time_ms / 350.0) * 10
+        float_y3 = math.sin(time_ms / 500.0 + 1) * 10
+
+        boy_img = assets.get("cred_boy")
+        girl_img = assets.get("cred_girl")
+        ai_img = assets.get("cred_ai")
+
+        # Boy on the top left
+        if boy_img:
+            surface.blit(boy_img, (panel_rect.left - 80, panel_rect.top + 80 + float_y1))
+        # Girl on the bottom left (flipped to face right)
+        if girl_img:
+            girl_flipped = pygame.transform.flip(girl_img, True, False)
+            surface.blit(girl_flipped, (panel_rect.left - 80, panel_rect.centery + 20 + float_y2))
+        # AI in the middle right side
+        if ai_img:
+            surface.blit(ai_img, (panel_rect.right - 50, panel_rect.centery - 60 + float_y3))
 
         self._cred_back_rect = pygame.Rect(cx - 80, panel_rect.bottom - 65, 160, 48)
         self._draw_sprite_button(surface, "back", self._cred_back_rect)
@@ -656,7 +687,7 @@ class NotificationManager:
         self._active = True    
 
     def _init_fonts(self):
-        font_path = "assets/fonts/PressStart2P-Regular.ttf"
+        font_path = resource_path("assets/fonts/PressStart2P-Regular.ttf")
         try:
             self._font = pygame.font.Font(font_path, 10)
         except Exception:
