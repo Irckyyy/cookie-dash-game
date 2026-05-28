@@ -27,6 +27,7 @@ class Game:
 
     # Screen states
     TITLE      = "title"
+    INTRO      = "intro"
     DIFFICULTY = "difficulty"
     PLAYING    = "game"
     END        = "end"
@@ -115,6 +116,8 @@ class Game:
         self.shake_timer = 0.0
 
         self.state = self.TITLE
+        self.current_intro_slide = 2
+        self.story_already_viewed = False 
         self.master_volume = 10
 
         self.running = True
@@ -286,7 +289,12 @@ class Game:
             if result:
                 button_clicked = True  # Play sound if a button was clicked
             if result == "difficulty":
-                self.state = self.DIFFICULTY
+                # ---> CHANGED: Go to intro deck if unread, otherwise skip to settings
+                if not getattr(self, 'story_already_viewed', False):
+                    self.state = "intro"
+                    self.current_intro_slide = 2
+                else:
+                    self.state = self.DIFFICULTY
             elif result == "quit":
                 self.running = False
             elif result == "options":
@@ -294,11 +302,25 @@ class Game:
             elif result == "credits":
                 self.state = self.CREDITS
 
+        # ---> NEW: HANDOFF MOUSE INTERACTIONS DURING THE INTRO
+        elif self.state == "intro":
+            result = self.screen_mgr.handle_intro_click(pos, self.current_intro_slide)
+            if result:
+                button_clicked = True
+            if result == "next_slide":
+                self.current_intro_slide += 1
+            elif result == "start_difficulty":
+                self.story_already_viewed = True  # Mark it read so it only shows once!
+                self.state = self.DIFFICULTY
+
         elif self.state == self.DIFFICULTY:
             result = self.screen_mgr.handle_difficulty_click(pos)
             
-            if result:
+            # Check if a card was clicked to play sound on difficulty cards
+            card_clicked = any(rect.collidepoint(pos) for rect in self.screen_mgr._diff_rects.values())
+            if result or card_clicked:
                 button_clicked = True
+                
             if result == "game":
                 self.start_game()
             elif result == "title":
@@ -360,10 +382,19 @@ class Game:
                 self.bfs_paused = False
 
         if button_clicked and getattr(self, 'sfx_click', None):
-            self.sfx_click.play()    
+            self.sfx_click.play()  
 
     def _handle_key(self, key):
         """Handle keyboard input during gameplay."""
+
+        if self.state == self.INTRO:
+            if key == pygame.K_SPACE:
+                self.story_already_viewed = True
+                self.state = self.DIFFICULTY
+                if getattr(self, 'sfx_click', None):
+                    self.sfx_click.play()
+            return
+
         if self.state == self.BFS_VIZ:
             if key == pygame.K_SPACE:
                 self.bfs_paused = not self.bfs_paused
@@ -492,6 +523,9 @@ class Game:
 
         if self.state == self.TITLE:
             self.screen_mgr.render_title(self.screen, dt)
+
+        elif self.state == self.INTRO:
+            self.screen_mgr.render_intro(self.screen, self.current_intro_slide)
 
         elif self.state == self.OPTIONS:
             self.screen_mgr.render_options(self.screen, self.master_volume)

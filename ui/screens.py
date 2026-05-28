@@ -203,6 +203,7 @@ class ScreenManager:
         self._quit_rect = pygame.Rect(start_x + 2 * (small_btn_w + gap), bottom_y, small_btn_w, small_btn_h)
         self._draw_sprite_button(surface, "quit", self._quit_rect, bg_color=(200, 60, 60))
 
+
     def handle_title_click(self, pos: tuple) -> str:
         """Handle click on title screen. Returns next screen or None."""
         if self._start_rect and self._start_rect.collidepoint(pos):
@@ -213,6 +214,51 @@ class ScreenManager:
             return "credits"
         if getattr(self, '_quit_rect', None) and self._quit_rect.collidepoint(pos):
             return "quit"
+        return None
+        
+    # ==================== INTRO STORY SLIDES ====================
+    def render_intro(self, surface: pygame.Surface, current_slide: int):
+        """Draw the story slide background and layer the clickable sprite precisely on top."""
+        # 1. Paint the background slide image (.jpg)
+        slide_img = assets._cache.get(f"story_slide_{current_slide}")
+        if slide_img:
+            scaled_slide = pygame.transform.smoothscale(slide_img, (WINDOW_WIDTH, WINDOW_HEIGHT))
+            surface.blit(scaled_slide, (0, 0))
+        else:
+            surface.fill((20, 25, 35))
+
+        cx = WINDOW_WIDTH // 2
+        
+        # 2. FIXED: Shifted coordinates up slightly (from WINDOW_HEIGHT - 105 to WINDOW_HEIGHT - 142)
+        # to map perfectly over the embedded button artwork in your slides!
+        button_y_position = WINDOW_HEIGHT - 142
+        self._intro_btn_rect = pygame.Rect(cx - 86, button_y_position, 172, 50)
+        
+        if current_slide == 6:
+            # Draw your custom 'start' button asset on slide 6 if it exists, otherwise use fallback
+            start_btn = assets.get_button("start")
+            if start_btn:
+                scaled_start = pygame.transform.smoothscale(start_btn, (self._intro_btn_rect.width, self._intro_btn_rect.height))
+                surface.blit(scaled_start, self._intro_btn_rect)
+            else:
+                self._draw_button(surface, self._intro_btn_rect, "START", bg_color=Colors.GOLD)
+        else:
+            # Draw your new custom next.png sprite over the slide layer
+            next_btn = assets._cache.get("btn_next")
+            if next_btn:
+                scaled_btn = pygame.transform.smoothscale(next_btn, (self._intro_btn_rect.width, self._intro_btn_rect.height))
+                surface.blit(scaled_btn, self._intro_btn_rect)
+            else:
+                # Text fallback if image can't be fetched
+                self._draw_button(surface, self._intro_btn_rect, "Next", primary=True)
+
+    def handle_intro_click(self, pos: tuple, current_slide: int) -> str:
+        """Process navigation interactions on the story deck overlay."""
+        if getattr(self, '_intro_btn_rect', None) and self._intro_btn_rect.collidepoint(pos):
+            if current_slide >= 6:
+                return "start_difficulty"
+            return "next_slide"
+        return None
         
     
     # ==================== OPTIONS SCREEN ====================

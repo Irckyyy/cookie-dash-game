@@ -314,7 +314,7 @@ class AssetLoader:
                 ).copy()
                 self._cache[f"btn_{name}"] = btn
 
-        for custom_btn in ["quit", "option", "credits"]:
+        for custom_btn in ["quit", "option", "credits", "next"]:
             path = os.path.join(_BG_DIR, f"{custom_btn}.png")
             if os.path.exists(path):
                 self._cache[f"btn_{custom_btn}"] = self._load_image(path)
@@ -346,6 +346,12 @@ class AssetLoader:
                     pygame.Rect(col * icon_w, row * icon_h, icon_w, icon_h)
                 ).copy()
                 self._cache[f"icon_{name}"] = icon
+
+        # ── Story and Intro Slide Loading ──
+        for i in range(2, 7):
+            slide_path = os.path.join(_BG_DIR, f"{i}.png")
+            if os.path.exists(slide_path):
+                self._cache[f"story_slide_{i}"] = self._load_image(slide_path)
 
 
 # Module-level singleton
