@@ -554,20 +554,24 @@ class ScreenManager:
         btn_w, btn_h = 130, 44
         btn_y = panel_rect.bottom + 16
         btn_gap = 12
-        total_btn_w = 4 * btn_w + 3 * btn_gap
-        btn_start_x = cx - total_btn_w // 2
-
-        self._menu_rect = pygame.Rect(btn_start_x, btn_y, btn_w, btn_h)
+        
+        # Row 1: Menu, View Map, Play Again
+        top_row_total_w = 3 * btn_w + 2 * btn_gap
+        top_row_start_x = cx - top_row_total_w // 2
+        
+        self._menu_rect = pygame.Rect(top_row_start_x, btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "menu", self._menu_rect)
 
-        self._review_rect = pygame.Rect(btn_start_x + btn_w + btn_gap, btn_y, btn_w, btn_h)
+        self._review_rect = pygame.Rect(top_row_start_x + btn_w + btn_gap, btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "view_maps", self._review_rect)
 
-        self._bfs_viz_rect = pygame.Rect(btn_start_x + 2 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
-        self._draw_button(surface, self._bfs_viz_rect, "BFS Check", primary=False)
-
-        self._again_rect = pygame.Rect(btn_start_x + 3 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
+        self._again_rect = pygame.Rect(top_row_start_x + 2 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "play_again", self._again_rect)
+
+        # Row 2: BFS Check (centered below)
+        bfs_btn_y = btn_y + btn_h + 10
+        self._bfs_viz_rect = pygame.Rect(cx - btn_w // 2, bfs_btn_y, btn_w, btn_h)
+        self._draw_sprite_button(surface, "BFS_button", self._bfs_viz_rect)
 
         # ---> 4. TRIGGER TOOLTIP OVERLAY IF HOVERED <---
         if hovered_type and hovered_rect and f"{hovered_type}_raw" in results:
@@ -577,7 +581,8 @@ class ScreenManager:
     def _render_math_tooltip(self, surface: pygame.Surface, target_rect: pygame.Rect, side: str, raw: dict, results: dict):
         """Draws a mathematical evaluation breakdown tooltip box right over the hovered metric card."""
         # Dynamic constants weights sourced from your configuration variables mapping rules
-        w_u, w_d, w_p, w_r = 10, 1000, 250, 500  
+        from setting import SCORE_REVEAL_TILE, SCORE_DELIVERY, PENALTY_PUDDLE, PENALTY_BROKEN
+        w_u, w_d, w_p, w_r = SCORE_REVEAL_TILE, SCORE_DELIVERY, PENALTY_PUDDLE, PENALTY_BROKEN
 
         # Compute values dynamically based on the academic grading standards sheet
         u_points = raw["tiles"] * w_u
@@ -589,7 +594,7 @@ class ScreenManager:
         final_pi = total_score / raw["time"]
 
         # Formulate display text lines mirroring the PUP formula sheet specifications
-        title_label = "PUP CCIS Evaluation Breakdown:"
+        title_label = "PI Score Evaluation Breakdown:"
         score_formula = f"Total Score = (w_u*U) + (w_d*D) - (w_p*P + w_r*R)"
         breakdown_line1 = f" Discovered (U): {raw['tiles']} tiles × {w_u} = +{u_points}"
         breakdown_line2 = f" Deliveries (D): {raw['deliveries']} doors × {w_d} = +{d_points}"

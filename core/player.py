@@ -21,7 +21,7 @@ class Player:
     def __init__(self, is_human: bool, start_pos: tuple = (0, 0)):
         self.is_human = is_human
         self.pos = start_pos          # (x, y) position
-        self.score = 0
+        self.score = SCORE_REVEAL_TILE
         self.deliveries = 0
         self.delivered_houses = set()   # set of "x,y" keys
         self.revealed_tiles = {f"{start_pos[0]},{start_pos[1]}"}
