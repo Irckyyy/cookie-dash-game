@@ -460,18 +460,18 @@ class ScreenManager:
         return None
 
     # ==================== END SCREEN ====================
-    def render_end(self, surface: pygame.Surface, results: dict):
-        """Draw the end/results screen with Frame 1 background and brown panel."""
+    def render_end(self, surface: pygame.Surface, results: dict, mouse_pos: tuple = (0, 0)):
+        """Draw the end/results screen with an interactive XAI mathematical breakdown hover tooltip."""
         self._draw_sky_background(surface)
 
         cx = WINDOW_WIDTH // 2
 
-        # Draw brown panel (expanded)
+        # Draw brown panel
         panel_w, panel_h = 580, 460
         panel_rect = pygame.Rect(cx - panel_w // 2, 40, panel_w, panel_h)
         self._draw_brown_panel(surface, panel_rect)
 
-        # Winner icon (use icon sprites)
+        # Winner icon
         winner_text = results.get("winner_text", "Game Over")
         if "You" in winner_text:
             winner_icon = assets.get_icon("human")
@@ -488,32 +488,43 @@ class ScreenManager:
         winner = self._title_font.render(winner_text, True, Colors.GOLD)
         surface.blit(winner, winner.get_rect(centerx=cx, centery=panel_rect.top + 110))
 
-        # Stats grid (2 columns × 3 rows) — symmetric layout
+        # Stats grid components
         stats = [
-            ("YOUR SCORE", str(results.get("human_score", 0)), Colors.BLUE),
-            ("AI SCORE", str(results.get("ai_score", 0)), Colors.PURPLE),
-            ("YOUR PI", str(results.get("human_pi", "0")), Colors.BLUE),
-            ("AI PI", str(results.get("ai_pi", "0")), Colors.PURPLE),
-            ("YOUR TIME", results.get("human_time", "0:00"), Colors.BLUE),
-            ("AI TIME", results.get("ai_time", "0:00"), Colors.PURPLE),
+            ("YOUR SCORE", str(results.get("human_score", 0)), Colors.BLUE, "human_score"),
+            ("AI SCORE", str(results.get("ai_score", 0)), Colors.PURPLE, "ai_score"),
+            ("YOUR PI", str(results.get("human_pi", "0")), Colors.BLUE, "human_pi"),
+            ("AI PI", str(results.get("ai_pi", "0")), Colors.PURPLE, "ai_pi"),
+            ("YOUR TIME", results.get("human_time", "0:00"), Colors.BLUE, "human_time"),
+            ("AI TIME", results.get("ai_time", "0:00"), Colors.PURPLE, "ai_time"),
         ]
 
-        padding = 30          # padding from panel edges
-        col_gap = 12          # gap between columns
+        padding = 30          
+        col_gap = 12          
         stat_h = 55
         row_gap = 10
         stat_w = (panel_w - 2 * padding - col_gap) // 2
         stat_start_y = panel_rect.top + 145
 
-        for idx, (label, value, color) in enumerate(stats):
+        # Dictionaries to capture active hover targets
+        hovered_type = None
+        hovered_rect = None
+
+        for idx, (label, value, color, key) in enumerate(stats):
             col = idx % 2
             row = idx // 2
             sx = panel_rect.left + padding + col * (stat_w + col_gap)
             sy = stat_start_y + row * (stat_h + row_gap)
             stat_rect = pygame.Rect(sx, sy, stat_w, stat_h)
 
-            pygame.draw.rect(surface, Colors.DEEP, stat_rect, border_radius=10)
-            pygame.draw.rect(surface, Colors.BORDER, stat_rect, width=1, border_radius=10)
+            # Check if this specific card is being hovered
+            if stat_rect.collidepoint(mouse_pos) and ("_pi" in key or "_score" in key):
+                pygame.draw.rect(surface, (40, 55, 90), stat_rect, border_radius=10) # Lighter hover highlight
+                pygame.draw.rect(surface, Colors.GOLD, stat_rect, width=2, border_radius=10)
+                hovered_type = "human" if "human" in key else "ai"
+                hovered_rect = stat_rect
+            else:
+                pygame.draw.rect(surface, Colors.DEEP, stat_rect, border_radius=10)
+                pygame.draw.rect(surface, Colors.BORDER, stat_rect, width=1, border_radius=10)
 
             # Label
             lbl = self._small_font.render(label, True, Colors.MUTED)
@@ -529,50 +540,95 @@ class ScreenManager:
         algo_desc = results.get("algo_desc", "")
 
         if algo_name and algo_y + 60 < panel_rect.bottom:
-            # Divider line
-            pygame.draw.line(surface, Colors.BORDER,
-                            (panel_rect.left + 30, algo_y),
-                            (panel_rect.right - 30, algo_y), 1)
+            pygame.draw.line(surface, Colors.BORDER, (panel_rect.left + 30, algo_y), (panel_rect.right - 30, algo_y), 1)
             algo_y += 12
-
-            algo_title = self._sub_font.render(
-                f"AI Algorithm: {algo_name}", True, Colors.GOLD
-            )
-            surface.blit(algo_title,
-                         algo_title.get_rect(centerx=cx, top=algo_y))
+            algo_title = self._sub_font.render(f"AI Algorithm: {algo_name}", True, Colors.GOLD)
+            surface.blit(algo_title, algo_title.get_rect(centerx=cx, top=algo_y))
             algo_y += 22
-
             for line in algo_desc.split("\n"):
                 desc = self._small_font.render(line, True, (210, 190, 150))
                 surface.blit(desc, desc.get_rect(centerx=cx, top=algo_y))
                 algo_y += 16
 
-        # Buttons row using sprite buttons
+        # Render bottom action buttons row
         btn_w, btn_h = 130, 44
         btn_y = panel_rect.bottom + 16
         btn_gap = 12
         total_btn_w = 4 * btn_w + 3 * btn_gap
         btn_start_x = cx - total_btn_w // 2
 
-        # Menu button
         self._menu_rect = pygame.Rect(btn_start_x, btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "menu", self._menu_rect)
 
-        # View Maps button
         self._review_rect = pygame.Rect(btn_start_x + btn_w + btn_gap, btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "view_maps", self._review_rect)
 
-        # BFS Check button
         self._bfs_viz_rect = pygame.Rect(btn_start_x + 2 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
-        # Tweak BFS button render rect so it matches the other buttons visually (it lacks image padding)
-        bfs_render_rect = pygame.Rect(0, 0, 120, 32)
-        bfs_render_rect.center = self._bfs_viz_rect.center
-        bfs_render_rect.y -= 2
-        self._draw_sprite_button(surface, "BFS_button", bfs_render_rect)
+        self._draw_button(surface, self._bfs_viz_rect, "BFS Check", primary=False)
 
-        # Play Again button
         self._again_rect = pygame.Rect(btn_start_x + 3 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
         self._draw_sprite_button(surface, "play_again", self._again_rect)
+
+        # ---> 4. TRIGGER TOOLTIP OVERLAY IF HOVERED <---
+        if hovered_type and hovered_rect and f"{hovered_type}_raw" in results:
+            raw_data = results[f"{hovered_type}_raw"]
+            self._render_math_tooltip(surface, hovered_rect, hovered_type, raw_data, results)
+
+    def _render_math_tooltip(self, surface: pygame.Surface, target_rect: pygame.Rect, side: str, raw: dict, results: dict):
+        """Draws a mathematical evaluation breakdown tooltip box right over the hovered metric card."""
+        # Dynamic constants weights sourced from your configuration variables mapping rules
+        w_u, w_d, w_p, w_r = 10, 1000, 250, 500  
+
+        # Compute values dynamically based on the academic grading standards sheet
+        u_points = raw["tiles"] * w_u
+        d_points = raw["deliveries"] * w_d
+        p_penalty = raw["puddles"] * w_p
+        r_penalty = raw["roads"] * w_r
+        
+        total_score = (u_points + d_points) - (p_penalty + r_penalty)
+        final_pi = total_score / raw["time"]
+
+        # Formulate display text lines mirroring the PUP formula sheet specifications
+        title_label = "PUP CCIS Evaluation Breakdown:"
+        score_formula = f"Total Score = (w_u*U) + (w_d*D) - (w_p*P + w_r*R)"
+        breakdown_line1 = f" Discovered (U): {raw['tiles']} tiles × {w_u} = +{u_points}"
+        breakdown_line2 = f" Deliveries (D): {raw['deliveries']} doors × {w_d} = +{d_points}"
+        breakdown_line3 = f" Puddles Hit (P): {raw['puddles']} hits  × {w_p} = -{p_penalty}"
+        breakdown_line4 = f" Broken Road (R): {raw['roads']} hits  × {w_r} = -{r_penalty}"
+        result_score    = f" Calculated Total Score = {total_score}"
+        pi_formula    = f"Performance Index (PI) = TotalScore / Time"
+        result_pi       = f" Final PI Score = {total_score} / {raw['time']}s = {final_pi:.2f}"
+
+        lines = [
+            (title_label, Colors.GOLD),
+            (score_formula, (180, 210, 255)),
+            (breakdown_line1, (200, 240, 200)),
+            (breakdown_line2, (200, 240, 200)),
+            (breakdown_line3, (255, 180, 180)),
+            (breakdown_line4, (255, 180, 180)),
+            (result_score, Colors.GOLD),
+            (pi_formula, (180, 210, 255)),
+            (result_pi, Colors.WHITE if side == "human" else (220, 190, 250))
+        ]
+
+        # Sizing metrics for a roomy pop-up card
+        tw, th = 440, 160
+        tx = target_rect.centerx - tw // 2
+        # Position box above or below cards depending on space availability
+        ty = target_rect.bottom + 8 if target_rect.top < 250 else target_rect.top - th - 8
+        
+        tooltip_rect = pygame.Rect(tx, ty, tw, th)
+
+        # Draw tooltip panel base container shapes
+        pygame.draw.rect(surface, (12, 18, 32, 245), tooltip_rect, border_radius=8) # Dark opaque backdrop
+        pygame.draw.rect(surface, Colors.GOLD, tooltip_rect, width=2, border_radius=8)
+
+        # Blit each algebraic description line sequentially
+        line_y = tooltip_rect.top + 10
+        for text_str, color_val in lines:
+            text_surf = self._small_font.render(text_str, True, color_val)
+            surface.blit(text_surf, (tooltip_rect.left + 14, line_y))
+            line_y += 15
 
     def handle_end_click(self, pos: tuple) -> str:
         """Handle click on end screen. Returns 'title', 'game', 'review', 'bfs_viz', or None."""

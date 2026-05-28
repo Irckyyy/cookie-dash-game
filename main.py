@@ -258,6 +258,24 @@ class Game:
         difficulty = self.screen_mgr.selected_difficulty
         self.results = calculate_results(self.human, self.ai_player, self.elapsed, difficulty)
 
+        if self.results:
+            self.results["human_raw"] = {
+                "tiles": len(self.human.revealed_tiles),
+                "deliveries": self.human.deliveries,
+                # If your Player class tracks penalties via a dictionary or count, 
+                # we fallback safely using getattr or standard properties:
+                "puddles": getattr(self.human, 'puddles_hit', 0) if hasattr(self.human, 'puddles_hit') else getattr(self.human, 'puddles', 0),
+                "roads": getattr(self.human, 'broken_roads_hit', 0) if hasattr(self.human, 'broken_roads_hit') else getattr(self.human, 'broken_roads', 0),
+                "time": max(1, self.elapsed)
+            }
+            self.results["ai_raw"] = {
+                "tiles": len(self.ai_player.revealed_tiles),
+                "deliveries": self.ai_player.deliveries,
+                "puddles": getattr(self.ai_player, 'puddles_hit', 0) if hasattr(self.ai_player, 'puddles_hit') else getattr(self.ai_player, 'puddles', 0),
+                "roads": getattr(self.ai_player, 'broken_roads_hit', 0) if hasattr(self.ai_player, 'broken_roads_hit') else getattr(self.ai_player, 'broken_roads', 0),
+                "time": max(1, self.ai_player.end_time if getattr(self.ai_player, 'end_time', 0) > 0 else self.elapsed)
+            }
+
         # Auto-complete the AI's path for the Replay
         if not self.ai_player.finished and self.ai_agent:
             safeguard = 0
@@ -570,7 +588,8 @@ class Game:
 
         elif self.state == self.END:
             if self.results:
-                self.screen_mgr.render_end(self.screen, self.results)
+                mouse_pos = pygame.mouse.get_pos()
+                self.screen_mgr.render_end(self.screen, self.results, mouse_pos)
 
         elif self.state == self.REVIEW:
             self._render_review()
