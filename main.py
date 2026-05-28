@@ -30,8 +30,10 @@ class Game:
     DIFFICULTY = "difficulty"
     PLAYING    = "game"
     END        = "end"
-    REVIEW     = "review"
+    REVIEW     = "review"   
     BFS_VIZ    = "bfs_viz"
+    OPTIONS    = "options"
+    CREDITS    = "credits"
 
     def __init__(self):
         pygame.init()
@@ -101,6 +103,10 @@ class Game:
         self.review_speed_idx = 1
         self.notif = NotificationManager()
 
+        self.bfs_anim_index = 0
+        self.bfs_anim_timer = 0.0
+        self.bfs_paused = False
+
         # Timers
         self._second_timer = 0.0
         self._ai_timer = 0.0
@@ -108,7 +114,23 @@ class Game:
 
         self.shake_timer = 0.0
 
+        self.state = self.TITLE
+        self.master_volume = 10
+
         self.running = True
+
+    def set_volume(self, volume: int):
+        """Dynamically adjusts the master volume of all game sounds."""
+        self.master_volume = max(0, min(100, volume))
+        v = self.master_volume / 100.0
+        try:
+            pygame.mixer.music.set_volume(0.2 * v)
+            for sfx in ['sfx_click', 'sfx_delivery', 'sfx_exit', 'sfx_road', 'sfx_puddle', 'sfx_win', 'sfx_lose', 'sfx_scan']:
+                s = getattr(self, sfx, None)
+                if s:
+                    s.set_volume(0.8 * v)
+        except Exception:
+            pass
 
     def start_game(self):
         """Initialize a new game session."""
@@ -256,22 +278,48 @@ class Game:
 
     def _handle_click(self, pos):
         """Route clicks to the active screen."""
-        button_clicked = False  # Track if a valid button was pressed
+        # Initialize the variable at the top so it always exists!
+        button_clicked = False
 
         if self.state == self.TITLE:
             result = self.screen_mgr.handle_title_click(pos)
             if result:
-                button_clicked = True
+                button_clicked = True  # Play sound if a button was clicked
             if result == "difficulty":
                 self.state = self.DIFFICULTY
+            elif result == "quit":
+                self.running = False
+            elif result == "options":
+                self.state = self.OPTIONS
+            elif result == "credits":
+                self.state = self.CREDITS
 
         elif self.state == self.DIFFICULTY:
             result = self.screen_mgr.handle_difficulty_click(pos)
+            
             if result:
                 button_clicked = True
             if result == "game":
                 self.start_game()
             elif result == "title":
+                self.state = self.TITLE
+
+        elif self.state == self.OPTIONS:
+            result = self.screen_mgr.handle_options_click(pos)
+            if result:
+                button_clicked = True
+            if result == "back":
+                self.state = self.TITLE
+            elif result == "voldown":
+                self.set_volume(self.master_volume - 10)
+            elif result == "volup":
+                self.set_volume(self.master_volume + 10)
+
+        elif self.state == self.CREDITS:
+            result = self.screen_mgr.handle_credits_click(pos)
+            if result:
+                button_clicked = True
+            if result == "back":
                 self.state = self.TITLE
 
         elif self.state == self.END:
@@ -285,12 +333,10 @@ class Game:
             elif result == "review":
                 self.state = self.REVIEW
                 self.review_anim_index = 1
-                self.review_anim_timer = 0.0
                 self.review_paused = True
             elif result == "bfs_viz":
                 self.state = self.BFS_VIZ
                 self.bfs_anim_index = 0
-                self.bfs_anim_timer = 0.0
                 self.bfs_paused = False
 
         elif self.state == self.REVIEW:
@@ -314,7 +360,7 @@ class Game:
                 self.bfs_paused = False
 
         if button_clicked and getattr(self, 'sfx_click', None):
-            self.sfx_click.play()
+            self.sfx_click.play()    
 
     def _handle_key(self, key):
         """Handle keyboard input during gameplay."""
@@ -446,6 +492,15 @@ class Game:
 
         if self.state == self.TITLE:
             self.screen_mgr.render_title(self.screen, dt)
+
+        elif self.state == self.OPTIONS:
+            self.screen_mgr.render_options(self.screen, self.master_volume)
+
+        elif self.state == self.CREDITS:
+            self.screen_mgr.render_credits(self.screen)
+
+        elif self.state == self.DIFFICULTY:
+            self.screen_mgr.render_difficulty(self.screen)
 
         elif self.state == self.DIFFICULTY:
             self.screen_mgr.render_difficulty(self.screen)

@@ -253,7 +253,8 @@ class AssetLoader:
     def _load_ui_assets(self):
         """Load all UI background/panel assets from the background folder."""
         # ── Sky background (Frame 1.png — the main background image) ──
-        sky_path = os.path.join(_BG_DIR, "Frame 1.png")
+
+        sky_path = os.path.join(_BG_DIR, "nightTimeBG.png")
         if os.path.exists(sky_path):
             self._cache["bg_sky"] = self._load_image(sky_path)
 
@@ -312,6 +313,11 @@ class AssetLoader:
                     pygame.Rect(0, i * btn_h, bw, btn_h)
                 ).copy()
                 self._cache[f"btn_{name}"] = btn
+
+        for custom_btn in ["quit", "option", "credits"]:
+            path = os.path.join(_BG_DIR, f"{custom_btn}.png")
+            if os.path.exists(path):
+                self._cache[f"btn_{custom_btn}"] = self._load_image(path)
 
         # ── Icons spritesheet (1251×960, 4 columns × 3 rows) ──
         icon_path = os.path.join(_BG_DIR, "icons.png")
