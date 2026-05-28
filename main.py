@@ -69,7 +69,8 @@ class Game:
             self.sfx_lose = pygame.mixer.Sound("assets/sounds/lose.wav")
             self.sfx_lose.set_volume(0.5)
 
-            self
+            self.sfx_bfs = pygame.mixer.Sound("assets/sounds/bfsclick.mp3")
+            self.sfx_bfs.set_volume(0.3)
 
         except Exception as e:
             print(f"Error loading music: {e}")  
@@ -385,6 +386,10 @@ class Game:
                     self.bfs_anim_timer -= 0.08
                     if self.bfs_anim_index < len(self.bfs_trace) - 1:
                         self.bfs_anim_index += 1
+
+                        if getattr(self, 'sfx_bfs', None):
+                            self.sfx_bfs.play()
+                            
                     else:
                         self.bfs_paused = True
             return
