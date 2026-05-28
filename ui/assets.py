@@ -314,7 +314,7 @@ class AssetLoader:
                 ).copy()
                 self._cache[f"btn_{name}"] = btn
 
-        for custom_btn in ["quit", "option", "credits", "next"]:
+        for custom_btn in ["quit", "option", "credits", "next", "BFS_button"]:
             path = os.path.join(_BG_DIR, f"{custom_btn}.png")
             if os.path.exists(path):
                 self._cache[f"btn_{custom_btn}"] = self._load_image(path)

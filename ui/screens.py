@@ -533,7 +533,7 @@ class ScreenManager:
 
         # BFS Check button
         self._bfs_viz_rect = pygame.Rect(btn_start_x + 2 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
-        self._draw_button(surface, self._bfs_viz_rect, "BFS Check", primary=False)
+        self._draw_sprite_button(surface, "BFS_button", self._bfs_viz_rect)
 
         # Play Again button
         self._again_rect = pygame.Rect(btn_start_x + 3 * (btn_w + btn_gap), btn_y, btn_w, btn_h)
