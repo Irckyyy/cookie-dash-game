@@ -236,7 +236,13 @@ class HUD:
             pygame.draw.rect(surface, Colors.BORDER, box3_rect, width=1, border_radius=6)
 
             # Draw Flashlight sprite if the player has it
-            if getattr(player, 'has_flashlight', False):
+            flashlight_timer = getattr(player, 'flashlight_timer', 0)
+            if flashlight_timer > 0:
                 flashlight_sprite = assets.get_scaled("flashlight", (20, 20))
                 if flashlight_sprite:
                     surface.blit(flashlight_sprite, flashlight_sprite.get_rect(center=box3_rect.center))
+                count_surf = self._label_font.render(f"{int(flashlight_timer)}s", True, Colors.WHITE)
+                count_rect = count_surf.get_rect(bottomright=(box3_rect.right - 1, box3_rect.bottom - 1))
+                bg_rect = count_rect.inflate(4, 2)
+                pygame.draw.rect(surface, Colors.NIGHT, bg_rect, border_radius=4)
+                surface.blit(count_surf, count_rect)

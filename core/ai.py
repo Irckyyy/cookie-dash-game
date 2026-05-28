@@ -289,6 +289,7 @@ class AIAgent:
         events = []
 
         if tile_type == Tile.PUDDLE:
+            ai.known_hazards.add(key)
             if ai.has_boots:
                 ai.boots_durability -= 1
                 if ai.boots_durability <= 0:
@@ -303,7 +304,6 @@ class AIAgent:
                 ai.score -= 150
                 ai.penalty_count["puddle"] += 1
                 ai.memory_pruned.add(key)
-                ai.known_hazards.add(key)
                 self._bfs_path.clear()  # Invalidate BFS path after revert
                 ai.revert_steps(2, game_state.get("safe_tiles"))
                 self.replay_log.append({
@@ -324,6 +324,7 @@ class AIAgent:
                 })
 
         elif tile_type == Tile.BROKEN:
+            ai.known_hazards.add(key)
             if ai.has_rope:
                 ai.rope_durability -= 1
                 if ai.rope_durability <= 0:
@@ -338,7 +339,6 @@ class AIAgent:
                 ai.score -= 200
                 ai.penalty_count["broken"] += 1
                 ai.memory_pruned.add(key)
-                ai.known_hazards.add(key)
                 self._bfs_path.clear()  # Invalidate BFS path after revert
                 ai.revert_steps(3, game_state.get("safe_tiles"))
                 self.replay_log.append({
@@ -380,24 +380,23 @@ class AIAgent:
                 "log": f"AI delivered cookie! +800pts ({ai.deliveries}/3)",
                 "log_type": "ai",
             })
-            if random.random() < 0.5:
-                item = random.choice(["boots", "rope"])
-                if item == "boots":
-                    ai.boots_durability = DIFFICULTY_CONFIG[difficulty]["boots_durability"]
-                    events.append({
-                        "type": "bonus",
-                        "msg": "Got Boots! Puddles protected!",
-                        "log": "AI received Boots!",
-                        "log_type": "ai",
-                    })
-                elif item == "rope":
-                    ai.rope_durability = DIFFICULTY_CONFIG[difficulty]["rope_durability"]
-                    events.append({
-                        "type": "bonus",
-                        "msg": "Got Rope! Roads protected!",
-                        "log": "AI received Rope!",
-                        "log_type": "ai",
-                    })
+            item = random.choice(["boots", "rope"])
+            if item == "boots":
+                ai.boots_durability = DIFFICULTY_CONFIG[difficulty]["boots_durability"]
+                events.append({
+                    "type": "bonus",
+                    "msg": "Got Boots! Puddles protected!",
+                    "log": "AI received Boots!",
+                    "log_type": "ai",
+                })
+            elif item == "rope":
+                ai.rope_durability = DIFFICULTY_CONFIG[difficulty]["rope_durability"]
+                events.append({
+                    "type": "bonus",
+                    "msg": "Got Rope! Roads protected!",
+                    "log": "AI received Rope!",
+                    "log_type": "ai",
+                })
 
         if tile_type == Tile.EXIT and ai.deliveries >= 3 and not ai.finished:
             ai.finished = True

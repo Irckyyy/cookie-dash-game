@@ -31,13 +31,16 @@ class GridRenderer:
         try:
             self._small_font = pygame.font.Font(font_path, 8)
             self._symbol_font = pygame.font.Font(font_path, 12)
+            self._hazard_font = pygame.font.Font(font_path, 16)
         except Exception:
             try:
                 self._small_font = pygame.font.SysFont("segoeuisymbol", 12)
                 self._symbol_font = pygame.font.SysFont("segoeuisymbol", 18, bold=True)
+                self._hazard_font = pygame.font.SysFont("segoeuisymbol", 24, bold=True)
             except Exception:
                 self._small_font = pygame.font.Font(None, 14)
                 self._symbol_font = pygame.font.Font(None, 20)
+                self._hazard_font = pygame.font.Font(None, 24)
 
         try:
             self._emoji_font = pygame.font.SysFont("segoeuisymbol", 24)
@@ -56,7 +59,6 @@ class GridRenderer:
                       tile_type: int, is_revealed: bool, key: str,
                       delivered: set, ai_brain_state: dict = None,
                       is_player_here: bool = False):
-        """Draw the background image/color for a tile."""
         if not is_revealed:
             # Draw the empty (dark) tile sprite
             surface.blit(assets.empty_tile, tile_rect)
@@ -82,7 +84,7 @@ class GridRenderer:
 
     def _draw_tile_entity(self, surface: pygame.Surface, tile_rect: pygame.Rect,
                           tile_type: int, is_player_here: bool, is_human: bool,
-                          key: str, delivered: set, is_revealed: bool):
+                          key: str, delivered: set, is_revealed: bool, known_hazards: set, force_reveal: bool = False, is_battery: bool = False):
         """Draw the entity sprite on top of a tile."""
         if not is_revealed and not is_player_here:
             return
@@ -99,6 +101,11 @@ class GridRenderer:
             return
 
         # Draw tile-specific sprites
+        if is_battery:
+            if assets.flashlight:
+                sprite_rect = assets.flashlight.get_rect(center=tile_rect.center)
+                surface.blit(assets.flashlight, sprite_rect)
+
         if tile_type == Tile.HOUSE:
             sprite = assets.delivered_house if key in delivered else assets.undelivered_house
             if sprite:
@@ -106,14 +113,16 @@ class GridRenderer:
                 surface.blit(sprite, sprite_rect)
 
         elif tile_type == Tile.PUDDLE:
-            if assets.puddle:
-                sprite_rect = assets.puddle.get_rect(center=tile_rect.center)
-                surface.blit(assets.puddle, sprite_rect)
+            if force_reveal:
+                if assets.puddle:
+                    sprite_rect = assets.puddle.get_rect(center=tile_rect.center)
+                    surface.blit(assets.puddle, sprite_rect)
 
         elif tile_type == Tile.BROKEN:
-            if assets.hole:
-                sprite_rect = assets.hole.get_rect(center=tile_rect.center)
-                surface.blit(assets.hole, sprite_rect)
+            if force_reveal:
+                if assets.hole:
+                    sprite_rect = assets.hole.get_rect(center=tile_rect.center)
+                    surface.blit(assets.hole, sprite_rect)
 
         elif tile_type == Tile.EXIT:
             if assets.door:
@@ -137,7 +146,7 @@ class GridRenderer:
                player, game_map: list, is_human: bool,
                force_reveal: bool = False, path_overlay: list = None,
                path_color: tuple = None, ai_brain_state: dict = None,
-               override_size: int = None):
+               override_size: int = None, difficulty: str = None, batteries: set = None):
         """
         Render the full grid onto the given surface.
         x_offset, y_offset: top-left corner of the grid wrapper.
@@ -228,10 +237,48 @@ class GridRenderer:
                     pygame.draw.rect(surface, glow_color, glow_inner,
                                      width=1, border_radius=5)
 
-                # Draw entity sprite on tile
+                # Calculate if tile is in current vision radius
+                is_in_vision = False
+                if difficulty:
+                    from setting import DIFFICULTY_CONFIG
+                    r = DIFFICULTY_CONFIG[difficulty]["vision_radius"]
+                    is_in_vision = max(abs(x - player.pos[0]), abs(y - player.pos[1])) <= r
+
+                # Check flashlight
+                flashlight_active = getattr(player, 'flashlight_timer', 0.0) > 0
+
+                # Force reveal if it's explicitly requested (replay) or if flashlight sees it
+                reveal_hazard = force_reveal or (flashlight_active and is_in_vision)
+                is_battery_on_tile = batteries is not None and (x, y) in batteries
+
+                # Draw entity sprite on tile (walls, houses, exits, known hazards)
                 self._draw_tile_entity(surface, tile_rect, tile_type,
                                        is_player_here, is_human,
-                                       key, player.delivered_houses, is_revealed)
+                                       key, player.delivered_houses, is_revealed, getattr(player, 'known_hazards', set()), reveal_hazard, is_battery_on_tile)
+
+                # Draw Minesweeper numbers only on safe tiles the player has actually stepped on (and not in replays)
+                # AND they must be currently in the player's vision radius!
+                if not force_reveal and is_revealed and is_in_vision and tile_type in (Tile.EMPTY, Tile.START) and hasattr(player, 'memory_visited') and key in player.memory_visited:
+                    # Count adjacent hazards
+                    hazards = 0
+                    for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < SIZE and 0 <= ny < SIZE:
+                            if game_map[ny][nx] in (Tile.PUDDLE, Tile.BROKEN):
+                                hazards += 1
+                    
+                    if hazards > 0:
+                        font_to_use = getattr(self, '_hazard_font', self._symbol_font)
+                        # Draw shadow
+                        shadow_surf = font_to_use.render(str(hazards), True, (0, 0, 0))
+                        shadow_rect = shadow_surf.get_rect(center=(tile_rect.centerx + 2, tile_rect.centery + 2))
+                        surface.blit(shadow_surf, shadow_rect)
+                        
+                        # Draw main text (White)
+                        num_surf = font_to_use.render(str(hazards), True, (255, 255, 255))
+                        num_rect = num_surf.get_rect(center=tile_rect.center)
+                        surface.blit(num_surf, num_rect)
+
 
                 # AI heuristic text overlay (review mode)
                 if ai_brain_state and is_revealed and not is_player_here:

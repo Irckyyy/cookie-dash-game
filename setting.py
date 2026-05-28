@@ -94,6 +94,7 @@ DIFFICULTY_CONFIG = {
         "ai_label": "(Stochastic)",
         "boots_durability": 3,
         "rope_durability": 3,
+        "flashlight_duration": 10,
     },
     Difficulty.MEDIUM: {
         "name": "Medium",
@@ -103,6 +104,7 @@ DIFFICULTY_CONFIG = {
         "ai_label": "(Greedy)",
         "boots_durability": 2,
         "rope_durability": 2,
+        "flashlight_duration": 7,
     },
     Difficulty.HARD: {
         "name": "Hard",
@@ -112,6 +114,7 @@ DIFFICULTY_CONFIG = {
         "ai_label": "(Lookahead)",
         "boots_durability": 1,
         "rope_durability": 1,
+        "flashlight_duration": 5,
     },
 }
 

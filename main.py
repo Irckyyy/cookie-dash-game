@@ -161,6 +161,13 @@ class Game:
             self.ai_player.tiles_in_view(difficulty)
         )
 
+        # Spawn batteries (flashlight pickups) on empty safe tiles
+        all_safe_empty = [pos for pos in self.safe_tiles 
+                          if self.game_map[pos[1]][pos[0]] == Tile.EMPTY 
+                          and pos != start_pos]
+        import random
+        self.batteries = set(random.sample(all_safe_empty, min(3, len(all_safe_empty))))
+
         # Reset state
         self.elapsed = 0
         self.game_over = False
@@ -450,12 +457,30 @@ class Game:
                 self.grid_renderer._human_facing = facing
             self._process_events(events)
 
+            # Check battery collection
+            if hasattr(self, 'batteries') and self.human.pos in self.batteries:
+                self.batteries.remove(self.human.pos)
+                from setting import DIFFICULTY_CONFIG
+                self.human.flashlight_timer = DIFFICULTY_CONFIG[difficulty]["flashlight_duration"]
+                self._process_events([{
+                    "type": "bonus",
+                    "msg": "Found a Battery! Flashlight active!",
+                    "log": "You picked up a Battery!",
+                    "log_type": "human"
+                }])
+
     def update(self, dt: float):
         """Update game logic each frame."""
         self.notif.update(dt)
 
         if self.shake_timer > 0:
             self.shake_timer -= dt
+
+        if self.state == self.PLAYING:
+            if getattr(self.human, 'flashlight_timer', 0) > 0:
+                self.human.flashlight_timer -= dt
+                if self.human.flashlight_timer < 0:
+                    self.human.flashlight_timer = 0
 
         if self.state == self.BFS_VIZ:
             if not getattr(self, 'bfs_paused', False):
@@ -599,7 +624,8 @@ class Game:
 
         self.grid_renderer.render(
             self.screen, start_x, grid_y,
-            self.human, self.game_map, is_human=True
+            self.human, self.game_map, is_human=True,
+            difficulty=self.screen_mgr.selected_difficulty, batteries=getattr(self, 'batteries', set())
         )
 
         try:

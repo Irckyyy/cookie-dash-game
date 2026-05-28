@@ -91,6 +91,10 @@ class AssetLoader:
     def tree(self) -> pygame.Surface:
         return self._cache["tree"]
 
+    @property
+    def flashlight(self) -> pygame.Surface:
+        return self._cache.get("flashlight")
+
     # ─── UI background asset getters ──────────────────────────────────
 
     @property

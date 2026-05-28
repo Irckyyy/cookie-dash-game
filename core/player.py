@@ -31,12 +31,14 @@ class Player:
         self.penalty_count = {"puddle": 0, "broken": 0}
         self.boots_durability = 0
         self.rope_durability = 0
-        self.has_flashlight = False
+        self.flashlight_timer = 0.0
+        self.known_hazards = set()
 
         # AI-specific memory
-        self.visited_tiles = {"0,0"}
+        start_key = f"{start_pos[0]},{start_pos[1]}"
+        self.visited_tiles = {start_key}
         self.pruned_tiles = set()
-        self.memory_visited = {"0,0"}
+        self.memory_visited = {start_key}
         self.memory_pruned = set()
         self.goal_idx = 0
         self.step_timer = 0
@@ -46,7 +48,7 @@ class Player:
         self.recent_positions = []   # Track last N positions for cycle detection
 
     def tiles_in_view(self, difficulty: str) -> set:
-        """Get set of 'x,y' keys visible from current position."""
+        """Returns the set of tiles the player can currently see based on difficulty."""
         r = DIFFICULTY_CONFIG[difficulty]["vision_radius"]
         visible = set()
         px, py = self.pos
@@ -119,9 +121,11 @@ class Player:
         self.add_revealed_tiles(new_visible)
 
         key = f"{nx},{ny}"
+        self.memory_visited.add(key)
 
         # Obstacle check — puddle
         if tile_type == Tile.PUDDLE:
+            self.known_hazards.add(key)
             if self.has_boots:
                 self.boots_durability -= 1
                 if self.boots_durability <= 0:
@@ -145,6 +149,7 @@ class Player:
 
         # Obstacle check — broken road
         elif tile_type == Tile.BROKEN:
+            self.known_hazards.add(key)
             if self.has_rope:
                 self.rope_durability -= 1
                 if self.rope_durability <= 0:
@@ -179,25 +184,24 @@ class Player:
                 "log_type": "human" if self.is_human else "ai",
             })
 
-            # Bonus item - 50% chance to get one of two items
-            if random.random() < 0.5:
-                item = random.choice(["boots", "rope"])
-                if item == "boots":
-                    self.boots_durability = DIFFICULTY_CONFIG[difficulty]["boots_durability"]
-                    events.append({
-                        "type": "bonus",
-                        "msg": "Got Boots! Puddles protected!",
-                        "log": f"{who} received Boots!",
-                        "log_type": "human" if self.is_human else "ai",
-                    })
-                elif item == "rope":
-                    self.rope_durability = DIFFICULTY_CONFIG[difficulty]["rope_durability"]
-                    events.append({
-                        "type": "bonus",
-                        "msg": "Got Rope! Roads protected!",
-                        "log": f"{who} received Rope!",
-                        "log_type": "human" if self.is_human else "ai",
-                    })
+            # Bonus item - guaranteed, 50-50 chance between boots and rope
+            item = random.choice(["boots", "rope"])
+            if item == "boots":
+                self.boots_durability = DIFFICULTY_CONFIG[difficulty]["boots_durability"]
+                events.append({
+                    "type": "bonus",
+                    "msg": "Got Boots! Puddles protected!",
+                    "log": f"{who} received Boots!",
+                    "log_type": "human" if self.is_human else "ai",
+                })
+            elif item == "rope":
+                self.rope_durability = DIFFICULTY_CONFIG[difficulty]["rope_durability"]
+                events.append({
+                    "type": "bonus",
+                    "msg": "Got Rope! Roads protected!",
+                    "log": f"{who} received Rope!",
+                    "log_type": "human" if self.is_human else "ai",
+                })
 
         # Exit check
         if tile_type == Tile.EXIT and self.deliveries >= DELIVERIES_NEEDED and not self.finished:
