@@ -64,10 +64,15 @@ class Player:
                 self.revealed_tiles.add(key)
                 self.score += SCORE_REVEAL_TILE
 
-    def revert_steps(self, steps: int):
-        """Push player back along their path history."""
+    def revert_steps(self, steps: int, safe_tiles: set = None):
+        """Push player back along their path history. If safe_tiles is provided, ensures the destination is safe to prevent softlocks."""
         hist = self.path_history
         target = max(0, len(hist) - 1 - steps)
+        
+        if safe_tiles:
+            while target > 0 and hist[target] not in safe_tiles:
+                target -= 1
+                
         # Remove reverted tiles from visited memory
         for i in range(target + 1, len(hist)):
             key = f"{hist[i][0]},{hist[i][1]}"
@@ -130,7 +135,7 @@ class Player:
             else:
                 self.score -= PENALTY_PUDDLE
                 self.penalty_count["puddle"] += 1
-                self.revert_steps(REVERT_PUDDLE)
+                self.revert_steps(REVERT_PUDDLE, game_state.get("safe_tiles"))
                 events.append({
                     "type": "penalty",
                     "msg": "Puddle! -150pts, pushed back 2 steps",
@@ -153,7 +158,7 @@ class Player:
             else:
                 self.score -= PENALTY_BROKEN
                 self.penalty_count["broken"] += 1
-                self.revert_steps(REVERT_BROKEN)
+                self.revert_steps(REVERT_BROKEN, game_state.get("safe_tiles"))
                 events.append({
                     "type": "penalty",
                     "msg": "Broken road! -200pts, pushed back 3 steps",

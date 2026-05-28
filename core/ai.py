@@ -305,7 +305,7 @@ class AIAgent:
                 ai.memory_pruned.add(key)
                 ai.known_hazards.add(key)
                 self._bfs_path.clear()  # Invalidate BFS path after revert
-                ai.revert_steps(2)
+                ai.revert_steps(2, game_state.get("safe_tiles"))
                 self.replay_log.append({
                     'pos': ai.pos,
                     'reason': "Hit a puddle! Pushed back 2 steps.",
@@ -340,7 +340,7 @@ class AIAgent:
                 ai.memory_pruned.add(key)
                 ai.known_hazards.add(key)
                 self._bfs_path.clear()  # Invalidate BFS path after revert
-                ai.revert_steps(3)
+                ai.revert_steps(3, game_state.get("safe_tiles"))
                 self.replay_log.append({
                     'pos': ai.pos,
                     'reason': "Hit a broken road! Pushed back 3 steps.",

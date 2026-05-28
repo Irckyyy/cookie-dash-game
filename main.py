@@ -145,6 +145,7 @@ class Game:
         self.houses = map_data["houses"]
         self.exit_pos = map_data["exit_pos"]
         self.bfs_trace = map_data.get("bfs_trace", [])
+        self.safe_tiles = self.bfs_trace[-1]['visited'] if self.bfs_trace else set()
         start_pos = map_data.get("start_pos", (0, 0))
 
         # Initialize players
@@ -440,7 +441,7 @@ class Game:
         if key in key_map:
             dx, dy = key_map[key]
             difficulty = self.screen_mgr.selected_difficulty
-            game_state = {"elapsed": self.elapsed}
+            game_state = {"elapsed": self.elapsed, "safe_tiles": getattr(self, "safe_tiles", set())}
             events = self.human.move(dx, dy, self.game_map, difficulty, game_state)
             # Update player facing direction for sprite rendering
             dir_map = {(0, -1): "up", (0, 1): "down", (-1, 0): "left", (1, 0): "right"}
@@ -505,7 +506,7 @@ class Game:
         if self._ai_timer >= self._ai_speed:
             self._ai_timer -= self._ai_speed
             difficulty = self.screen_mgr.selected_difficulty
-            game_state = {"elapsed": self.elapsed}
+            game_state = {"elapsed": self.elapsed, "safe_tiles": self.safe_tiles}
             events = self.ai_agent.step(difficulty, game_state)
             self._process_events(events)
 
