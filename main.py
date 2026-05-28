@@ -177,7 +177,7 @@ class Game:
         # Reset HUD log
         self.hud.clear_log()
         self.hud.add_log(format_time(0),
-                         "🍪 Game started! Deliver cookies to all 3 houses, then find the exit!",
+                         "Game started! Deliver cookies to all 3 houses, then find the exit!",
                          "system")
 
         self.state = self.PLAYING
@@ -675,7 +675,7 @@ class Game:
                 b_font = pygame.font.Font(None, 15)
                 t_font = pygame.font.Font(None, 17)
 
-            title = t_font.render("🤖 AI STATUS", True, Colors.GOLD)
+            title = t_font.render("AI STATUS", True, Colors.GOLD)
             self.screen.blit(title, (ai_x + 10, panel_y + 6))
 
             target_str = str(ai_brain_state.get('target', 'None'))

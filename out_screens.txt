@@ -1,0 +1,4 @@
+2 ui/screens.py — Title, Difficulty Select, and End/Results screens.
+170         sub = self._sub_font.render("INTRO TO AI · CASE STUDY 1", True, (210, 190, 150))
+331             "Krisdel Ybañez",  # Used the proper 'ñ' character for Yñiguez
+460         # Stats grid (2 columns × 3 rows) — symmetric layout

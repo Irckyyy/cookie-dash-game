@@ -208,6 +208,11 @@ class HUD:
                 boot_sprite = assets.get_scaled("boots", (20, 20))
                 if boot_sprite:
                     surface.blit(boot_sprite, boot_sprite.get_rect(center=box1_rect.center))
+                count_surf = self._label_font.render(str(player.boots_durability), True, Colors.WHITE)
+                count_rect = count_surf.get_rect(bottomright=(box1_rect.right - 1, box1_rect.bottom - 1))
+                bg_rect = count_rect.inflate(4, 2)
+                pygame.draw.rect(surface, Colors.NIGHT, bg_rect, border_radius=4)
+                surface.blit(count_surf, count_rect)
 
             # Box 2 (Rope)
             box2_rect = pygame.Rect(x + 32, y, 26, 26)
@@ -219,6 +224,11 @@ class HUD:
                 rope_sprite = assets.get_scaled("rope", (20, 20))
                 if rope_sprite:
                     surface.blit(rope_sprite, rope_sprite.get_rect(center=box2_rect.center))
+                count_surf = self._label_font.render(str(player.rope_durability), True, Colors.WHITE)
+                count_rect = count_surf.get_rect(bottomright=(box2_rect.right - 1, box2_rect.bottom - 1))
+                bg_rect = count_rect.inflate(4, 2)
+                pygame.draw.rect(surface, Colors.NIGHT, bg_rect, border_radius=4)
+                surface.blit(count_surf, count_rect)
                     
             # Box 3 (Flashlight)
             box3_rect = pygame.Rect(x + 64, y, 26, 26)

@@ -38,21 +38,6 @@ DIRS = [
     (0, -1),  # up
 ]
 
-# ======================== EMOJI TEXT ========================
-EMOJI = {
-    "house":   "🏠",
-    "exit":    "🚪",
-    "puddle":  "💧",
-    "broken":  "🪨",
-    "start":   "🌟",
-    "boot":    "👢",
-    "rope":    "🪢",
-    "player":  "🧒",
-    "ai":      "🤖",
-    "cookie":  "🍪",
-    "trophy":  "🏆",
-    "check":   "✅",
-}
 
 # ======================== COLORS (from CSS :root) ========================
 class Colors:
@@ -103,27 +88,30 @@ class Difficulty:
 DIFFICULTY_CONFIG = {
     Difficulty.EASY: {
         "name": "Easy",
-        "icon": "🔦",
         "desc": "3×3 vision\nAI uses random paths + memory decay",
         "vision_radius": 1,
         "ai_speed_ms": 800,
         "ai_label": "(Stochastic)",
+        "boots_durability": 3,
+        "rope_durability": 3,
     },
     Difficulty.MEDIUM: {
         "name": "Medium",
-        "icon": "🌙",
         "desc": "2×2 vision\nAI uses deterministic greedy search",
         "vision_radius": 1,
         "ai_speed_ms": 500,
         "ai_label": "(Greedy)",
+        "boots_durability": 2,
+        "rope_durability": 2,
     },
     Difficulty.HARD: {
         "name": "Hard",
-        "icon": "💀",
         "desc": "1×1 vision\nAI uses lookahead DFS with predictive pruning",
         "vision_radius": 0,
         "ai_speed_ms": 350,
         "ai_label": "(Lookahead)",
+        "boots_durability": 1,
+        "rope_durability": 1,
     },
 }
 

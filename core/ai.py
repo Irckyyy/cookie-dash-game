@@ -288,53 +288,75 @@ class AIAgent:
         key = f"{nx},{ny}"
         events = []
 
-        if tile_type == Tile.PUDDLE and not ai.has_boots:
-            ai.score -= 150
-            ai.penalty_count["puddle"] += 1
-            ai.memory_pruned.add(key)
-            ai.known_hazards.add(key)
-            self._bfs_path.clear()  # Invalidate BFS path after revert
-            ai.revert_steps(2)
-            self.replay_log.append({
-                'pos': ai.pos,
-                'reason': "Hit a puddle! Pushed back 2 steps.",
-                'visited': set(ai.memory_visited),
-                'pruned': set(ai.memory_pruned),
-                'target': target,
-                'h_n': manhattan(ai.pos, target),
-                'stuck_counter': ai.stuck_counter,
-                'state': 'Penalty (Puddle)'
-            })
-            events.append({
-                "type": "penalty",
-                "msg": "🤖 AI puddle! -150pts",
-                "log": "AI stepped on a puddle! -150pts",
-                "log_type": "ai",
-            })
+        if tile_type == Tile.PUDDLE:
+            if ai.has_boots:
+                ai.boots_durability -= 1
+                if ai.boots_durability <= 0:
+                    ai.boots_durability = 0
+                    events.append({
+                        "type": "penalty",
+                        "msg": "AI's boots broke!",
+                        "log": "AI's boots broke!",
+                        "log_type": "ai",
+                    })
+            else:
+                ai.score -= 150
+                ai.penalty_count["puddle"] += 1
+                ai.memory_pruned.add(key)
+                ai.known_hazards.add(key)
+                self._bfs_path.clear()  # Invalidate BFS path after revert
+                ai.revert_steps(2)
+                self.replay_log.append({
+                    'pos': ai.pos,
+                    'reason': "Hit a puddle! Pushed back 2 steps.",
+                    'visited': set(ai.memory_visited),
+                    'pruned': set(ai.memory_pruned),
+                    'target': target,
+                    'h_n': manhattan(ai.pos, target),
+                    'stuck_counter': ai.stuck_counter,
+                    'state': 'Penalty (Puddle)'
+                })
+                events.append({
+                    "type": "penalty",
+                    "msg": "AI puddle! -150pts",
+                    "log": "AI stepped on a puddle! -150pts",
+                    "log_type": "ai",
+                })
 
-        elif tile_type == Tile.BROKEN and not ai.has_rope:
-            ai.score -= 200
-            ai.penalty_count["broken"] += 1
-            ai.memory_pruned.add(key)
-            ai.known_hazards.add(key)
-            self._bfs_path.clear()  # Invalidate BFS path after revert
-            ai.revert_steps(3)
-            self.replay_log.append({
-                'pos': ai.pos,
-                'reason': "Hit a broken road! Pushed back 3 steps.",
-                'visited': set(ai.memory_visited),
-                'pruned': set(ai.memory_pruned),
-                'target': target,
-                'h_n': manhattan(ai.pos, target),
-                'stuck_counter': ai.stuck_counter,
-                'state': 'Penalty (Broken Road)'
-            })
-            events.append({
-                "type": "penalty",
-                "msg": "🤖 AI broken road! -200pts",
-                "log": "AI hit a broken road! -200pts",
-                "log_type": "ai",
-            })
+        elif tile_type == Tile.BROKEN:
+            if ai.has_rope:
+                ai.rope_durability -= 1
+                if ai.rope_durability <= 0:
+                    ai.rope_durability = 0
+                    events.append({
+                        "type": "penalty",
+                        "msg": "AI's rope broke!",
+                        "log": "AI's rope broke!",
+                        "log_type": "ai",
+                    })
+            else:
+                ai.score -= 200
+                ai.penalty_count["broken"] += 1
+                ai.memory_pruned.add(key)
+                ai.known_hazards.add(key)
+                self._bfs_path.clear()  # Invalidate BFS path after revert
+                ai.revert_steps(3)
+                self.replay_log.append({
+                    'pos': ai.pos,
+                    'reason': "Hit a broken road! Pushed back 3 steps.",
+                    'visited': set(ai.memory_visited),
+                    'pruned': set(ai.memory_pruned),
+                    'target': target,
+                    'h_n': manhattan(ai.pos, target),
+                    'stuck_counter': ai.stuck_counter,
+                    'state': 'Penalty (Broken Road)'
+                })
+                events.append({
+                    "type": "penalty",
+                    "msg": "AI broken road! -200pts",
+                    "log": "AI hit a broken road! -200pts",
+                    "log_type": "ai",
+                })
 
         # After penalty/revert, update progress tracking
         new_dist = manhattan(ai.pos, target)
@@ -354,23 +376,36 @@ class AIAgent:
             ai.memory_pruned.clear()
             events.append({
                 "type": "delivery",
-                "msg": f"🤖 AI delivered! ({ai.deliveries}/3)",
+                "msg": f"AI delivered! ({ai.deliveries}/3)",
                 "log": f"AI delivered cookie! +800pts ({ai.deliveries}/3)",
                 "log_type": "ai",
             })
-            if random.random() < 0.3:
-                if not ai.has_boots:
-                    ai.has_boots = True
-                elif not ai.has_rope:
-                    ai.has_rope = True
+            if random.random() < 0.5:
+                item = random.choice(["boots", "rope"])
+                if item == "boots":
+                    ai.boots_durability = DIFFICULTY_CONFIG[difficulty]["boots_durability"]
+                    events.append({
+                        "type": "bonus",
+                        "msg": "Got Boots! Puddles protected!",
+                        "log": "AI received Boots!",
+                        "log_type": "ai",
+                    })
+                elif item == "rope":
+                    ai.rope_durability = DIFFICULTY_CONFIG[difficulty]["rope_durability"]
+                    events.append({
+                        "type": "bonus",
+                        "msg": "Got Rope! Roads protected!",
+                        "log": "AI received Rope!",
+                        "log_type": "ai",
+                    })
 
         if tile_type == Tile.EXIT and ai.deliveries >= 3 and not ai.finished:
             ai.finished = True
             ai.finish_time = game_state.get("elapsed", 0)
             events.append({
                 "type": "finish",
-                "msg": "🤖 AI exited the village!",
-                "log": "🤖 AI exited the village!",
+                "msg": "AI exited the village!",
+                "log": "AI exited the village!",
                 "log_type": "ai",
             })
 

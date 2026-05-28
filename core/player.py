@@ -29,8 +29,9 @@ class Player:
         self.finished = False
         self.finish_time = None
         self.penalty_count = {"puddle": 0, "broken": 0}
-        self.has_boots = False
-        self.has_rope = False
+        self.boots_durability = 0
+        self.rope_durability = 0
+        self.has_flashlight = False
 
         # AI-specific memory
         self.visited_tiles = {"0,0"}
@@ -74,6 +75,14 @@ class Player:
         self.pos = hist[target]
         self.path_history = hist[:target + 1]
 
+    @property
+    def has_boots(self):
+        return self.boots_durability > 0
+
+    @property
+    def has_rope(self):
+        return self.rope_durability > 0
+
     def move(self, dx: int, dy: int, game_map: list, difficulty: str, game_state) -> list:
         """
         Attempt to move the player by (dx, dy).
@@ -107,28 +116,50 @@ class Player:
         key = f"{nx},{ny}"
 
         # Obstacle check — puddle
-        if tile_type == Tile.PUDDLE and not self.has_boots:
-            self.score -= PENALTY_PUDDLE
-            self.penalty_count["puddle"] += 1
-            self.revert_steps(REVERT_PUDDLE)
-            events.append({
-                "type": "penalty",
-                "msg": "💧 Puddle! -150pts, pushed back 2 steps",
-                "log": "You stepped on a puddle! -150pts" if self.is_human else "AI stepped on a puddle! -150pts",
-                "log_type": "penalty" if self.is_human else "ai",
-            })
+        if tile_type == Tile.PUDDLE:
+            if self.has_boots:
+                self.boots_durability -= 1
+                if self.boots_durability <= 0:
+                    self.boots_durability = 0
+                    events.append({
+                        "type": "penalty",
+                        "msg": "Boots broke!",
+                        "log": "Your boots broke!" if self.is_human else "AI's boots broke!",
+                        "log_type": "penalty" if self.is_human else "ai",
+                    })
+            else:
+                self.score -= PENALTY_PUDDLE
+                self.penalty_count["puddle"] += 1
+                self.revert_steps(REVERT_PUDDLE)
+                events.append({
+                    "type": "penalty",
+                    "msg": "Puddle! -150pts, pushed back 2 steps",
+                    "log": "You stepped on a puddle! -150pts" if self.is_human else "AI stepped on a puddle! -150pts",
+                    "log_type": "penalty" if self.is_human else "ai",
+                })
 
         # Obstacle check — broken road
-        elif tile_type == Tile.BROKEN and not self.has_rope:
-            self.score -= PENALTY_BROKEN
-            self.penalty_count["broken"] += 1
-            self.revert_steps(REVERT_BROKEN)
-            events.append({
-                "type": "penalty",
-                "msg": "🪨 Broken road! -200pts, pushed back 3 steps",
-                "log": "You hit a broken road! -200pts" if self.is_human else "AI hit a broken road! -200pts",
-                "log_type": "penalty" if self.is_human else "ai",
-            })
+        elif tile_type == Tile.BROKEN:
+            if self.has_rope:
+                self.rope_durability -= 1
+                if self.rope_durability <= 0:
+                    self.rope_durability = 0
+                    events.append({
+                        "type": "penalty",
+                        "msg": "Rope broke!",
+                        "log": "Your rope broke!" if self.is_human else "AI's rope broke!",
+                        "log_type": "penalty" if self.is_human else "ai",
+                    })
+            else:
+                self.score -= PENALTY_BROKEN
+                self.penalty_count["broken"] += 1
+                self.revert_steps(REVERT_BROKEN)
+                events.append({
+                    "type": "penalty",
+                    "msg": "Broken road! -200pts, pushed back 3 steps",
+                    "log": "You hit a broken road! -200pts" if self.is_human else "AI hit a broken road! -200pts",
+                    "log_type": "penalty" if self.is_human else "ai",
+                })
 
         # House delivery
         if tile_type == Tile.HOUSE and key not in self.delivered_houses:
@@ -138,27 +169,27 @@ class Player:
             who = "You" if self.is_human else "AI"
             events.append({
                 "type": "delivery",
-                "msg": f"🍪 {'Delivered' if self.is_human else 'AI delivered'}! +800pts ({self.deliveries}/{DELIVERIES_NEEDED})",
+                "msg": f"{'Delivered' if self.is_human else 'AI delivered'}! +800pts ({self.deliveries}/{DELIVERIES_NEEDED})",
                 "log": f"{who} delivered a cookie! +800pts ({self.deliveries}/{DELIVERIES_NEEDED})",
                 "log_type": "human" if self.is_human else "ai",
             })
 
-            # Bonus item
-            chance = BONUS_ITEM_CHANCE_PLAYER if self.is_human else 0.3
-            if random.random() < chance:
-                if not self.has_boots:
-                    self.has_boots = True
+            # Bonus item - 50% chance to get one of two items
+            if random.random() < 0.5:
+                item = random.choice(["boots", "rope"])
+                if item == "boots":
+                    self.boots_durability = DIFFICULTY_CONFIG[difficulty]["boots_durability"]
                     events.append({
                         "type": "bonus",
-                        "msg": "👢 Got Boots! Puddles protected!",
+                        "msg": "Got Boots! Puddles protected!",
                         "log": f"{who} received Boots!",
                         "log_type": "human" if self.is_human else "ai",
                     })
-                elif not self.has_rope:
-                    self.has_rope = True
+                elif item == "rope":
+                    self.rope_durability = DIFFICULTY_CONFIG[difficulty]["rope_durability"]
                     events.append({
                         "type": "bonus",
-                        "msg": "🪢 Got Rope! Roads protected!",
+                        "msg": "Got Rope! Roads protected!",
                         "log": f"{who} received Rope!",
                         "log_type": "human" if self.is_human else "ai",
                     })
@@ -167,7 +198,7 @@ class Player:
         if tile_type == Tile.EXIT and self.deliveries >= DELIVERIES_NEEDED and not self.finished:
             self.finished = True
             self.finish_time = game_state.get("elapsed", 0)
-            who = "🎉 You" if self.is_human else "🤖 AI"
+            who = "You" if self.is_human else "AI"
             events.append({
                 "type": "finish",
                 "msg": f"{who} exited the village!",
