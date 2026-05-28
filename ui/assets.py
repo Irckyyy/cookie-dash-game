@@ -190,9 +190,13 @@ class AssetLoader:
     def _load_tiles(self, tile_size: int):
         """Load and scale all tile assets."""
         # Individual tile from the filled_tiles grid (extract one cell)
-        filled_full = self._load_image(os.path.join(_TILES_DIR, "filled_tiles.png"))
-        # The filled_tiles.png is a 10x10 grid of 640x640 — each cell is 64x64
-        # We extract a single cell for the repeating tile
+        night_path = os.path.join(_BG_DIR, "night_tiles.png")
+        if os.path.exists(night_path):
+            filled_full = self._load_image(night_path)
+        else:
+            filled_full = self._load_image(os.path.join(_TILES_DIR, "filled_tiles.png"))
+        
+        # The grid is 10x10 cells
         cell_size = filled_full.get_width() // 10
         single_filled = filled_full.subsurface(pygame.Rect(0, 0, cell_size, cell_size))
         self._cache["filled_tile"] = self._scale(single_filled, tile_size)
@@ -304,7 +308,7 @@ class AssetLoader:
         if os.path.exists(empty_grid_path):
             self._cache["bg_empty_grid"] = self._load_image(empty_grid_path)
 
-        filled_grid_path = os.path.join(_BG_DIR, "filled tiles.png")
+        filled_grid_path = os.path.join(_BG_DIR, "night_tiles.png")
         if os.path.exists(filled_grid_path):
             self._cache["bg_filled_grid"] = self._load_image(filled_grid_path)
 
