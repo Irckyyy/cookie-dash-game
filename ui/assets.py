@@ -210,6 +210,9 @@ class AssetLoader:
             "hole":              "hole.png",
             "rock":              "rock.png",
             "tree":              "tree.png",
+            "boots":             "boots.png",
+            "rope":              "rope.png",
+            "flashlight":        "flashlight.png",
         }
 
         for name, filename in tile_files.items():

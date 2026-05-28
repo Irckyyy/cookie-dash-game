@@ -203,17 +203,30 @@ class HUD:
             pygame.draw.rect(surface, Colors.DEEP, box1_rect, border_radius=6)
             pygame.draw.rect(surface, Colors.BORDER, box1_rect, width=1, border_radius=6)
 
-            # Draw Boot emoji if the player has it
+            # Draw Boot sprite if the player has it
             if player.has_boots:
-                boot_surf = self._val_font.render("👢", True, Colors.TEXT)
-                surface.blit(boot_surf, boot_surf.get_rect(center=box1_rect.center))
+                boot_sprite = assets.get_scaled("boots", (20, 20))
+                if boot_sprite:
+                    surface.blit(boot_sprite, boot_sprite.get_rect(center=box1_rect.center))
 
             # Box 2 (Rope)
             box2_rect = pygame.Rect(x + 32, y, 26, 26)
             pygame.draw.rect(surface, Colors.DEEP, box2_rect, border_radius=6)
             pygame.draw.rect(surface, Colors.BORDER, box2_rect, width=1, border_radius=6)
 
-            # Draw Rope emoji if the player has it
+            # Draw Rope sprite if the player has it
             if player.has_rope:
-                rope_surf = self._val_font.render("🪢", True, Colors.TEXT)
-                surface.blit(rope_surf, rope_surf.get_rect(center=box2_rect.center))
+                rope_sprite = assets.get_scaled("rope", (20, 20))
+                if rope_sprite:
+                    surface.blit(rope_sprite, rope_sprite.get_rect(center=box2_rect.center))
+                    
+            # Box 3 (Flashlight)
+            box3_rect = pygame.Rect(x + 64, y, 26, 26)
+            pygame.draw.rect(surface, Colors.DEEP, box3_rect, border_radius=6)
+            pygame.draw.rect(surface, Colors.BORDER, box3_rect, width=1, border_radius=6)
+
+            # Draw Flashlight sprite if the player has it
+            if getattr(player, 'has_flashlight', False):
+                flashlight_sprite = assets.get_scaled("flashlight", (20, 20))
+                if flashlight_sprite:
+                    surface.blit(flashlight_sprite, flashlight_sprite.get_rect(center=box3_rect.center))
