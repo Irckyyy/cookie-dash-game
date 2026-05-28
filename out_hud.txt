@@ -1,3 +1,0 @@
-2 ui/hud.py — Heads-Up Display: scores, timer, delivery dots, log panel.
-65                 # Delivered — show mini cookie sprite
-71                     check = self._label_font.render("✓", True, Colors.WHITE)

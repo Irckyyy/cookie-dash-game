@@ -1,7 +1,0 @@
-2 main.py — Entry point for Cookie Dash Pygame application.
-26     """Main game controller — state machine and pygame loop."""
-180                          "🍪 Game started! Deliver cookies to all 3 houses, then find the exit!",
-230         # One finished — start grace period
-678             title = t_font.render("🤖 AI STATUS", True, Colors.GOLD)
-726         # Grid dimensions — centered, large
-826         status_hint = info_font.render(f"[{paused_text}] (Space: play/pause, ←→: step)", True, Colors.WHITE)

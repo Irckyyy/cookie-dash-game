@@ -1,3 +1,0 @@
-2 ui/renderer.py — Handles rendering of the game grid and entities.
-68         # AI Brain visualizations — tinted overlays
-149         # Calculate tile dimensions — scaled if override_size is provided
