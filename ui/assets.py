@@ -100,6 +100,14 @@ class AssetLoader:
     def flashlight(self) -> pygame.Surface:
         return self._cache.get("flashlight")
 
+    @property
+    def warning(self) -> pygame.Surface:
+        return self._cache.get("warning")
+
+    @property
+    def battery(self) -> pygame.Surface:
+        return self._cache.get("battery")
+
     # ─── UI background asset getters ──────────────────────────────────
 
     @property
@@ -226,6 +234,8 @@ class AssetLoader:
             "boots":             "boots.png",
             "rope":              "rope.png",
             "flashlight":        "flashlight.png",
+            "warning":           "warning.png",
+            "battery":           "battery.png",
         }
 
         for name, filename in tile_files.items():

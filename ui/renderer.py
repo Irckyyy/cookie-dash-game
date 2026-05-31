@@ -102,9 +102,9 @@ class GridRenderer:
 
         # Draw tile-specific sprites
         if is_battery:
-            if assets.flashlight:
-                sprite_rect = assets.flashlight.get_rect(center=tile_rect.center)
-                surface.blit(assets.flashlight, sprite_rect)
+            if assets.battery:
+                sprite_rect = assets.battery.get_rect(center=tile_rect.center)
+                surface.blit(assets.battery, sprite_rect)
 
         if tile_type == Tile.HOUSE:
             sprite = assets.delivered_house if key in delivered else assets.undelivered_house
@@ -256,10 +256,7 @@ class GridRenderer:
                                        is_player_here, is_human,
                                        key, player.delivered_houses, is_revealed, getattr(player, 'known_hazards', set()), reveal_hazard, is_battery_on_tile)
 
-                # Draw Minesweeper numbers only on safe tiles the player has actually stepped on (and not in replays)
-                # AND they must be currently in the player's vision radius!
-                if not force_reveal and is_revealed and is_in_vision and tile_type in (Tile.EMPTY, Tile.START) and hasattr(player, 'memory_visited') and key in player.memory_visited:
-                    # Count adjacent hazards
+                if is_player_here and is_human:
                     hazards = 0
                     for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
                         nx, ny = x + dx, y + dy
@@ -267,17 +264,27 @@ class GridRenderer:
                             if game_map[ny][nx] in (Tile.PUDDLE, Tile.BROKEN):
                                 hazards += 1
                     
-                    if hazards > 0:
-                        font_to_use = getattr(self, '_hazard_font', self._symbol_font)
-                        # Draw shadow
-                        shadow_surf = font_to_use.render(str(hazards), True, (0, 0, 0))
-                        shadow_rect = shadow_surf.get_rect(center=(tile_rect.centerx + 2, tile_rect.centery + 2))
-                        surface.blit(shadow_surf, shadow_rect)
+                    if hazards > 0 and assets.warning:
+                        import math
+                        import time
                         
-                        # Draw main text (White)
-                        num_surf = font_to_use.render(str(hazards), True, (255, 255, 255))
-                        num_rect = num_surf.get_rect(center=tile_rect.center)
-                        surface.blit(num_surf, num_rect)
+                        # Scale based on hazards
+                        scale_factor = 0.5 + (hazards - 1) * 0.1
+                        
+                        # Glow/bob animation
+                        t = time.time() * 5
+                        bob = math.sin(t) * 3
+                        
+                        orig_w, orig_h = assets.warning.get_size()
+                        base_w = tile_size * 0.6
+                        new_w = max(1, int(base_w * scale_factor))
+                        new_h = max(1, int((orig_h / orig_w) * new_w))
+                        warning_scaled = pygame.transform.smoothscale(assets.warning, (new_w, new_h))
+                        
+                        warn_rect = warning_scaled.get_rect(center=tile_rect.center)
+                        warn_rect.y -= (tile_size // 2 + new_h // 2 + int(bob))
+                        
+                        surface.blit(warning_scaled, warn_rect)
 
 
                 # AI heuristic text overlay (review mode)

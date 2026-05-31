@@ -148,10 +148,18 @@ class Player:
                 self.score -= PENALTY_PUDDLE
                 self.penalty_count["puddle"] += 1
                 
+                # Calculate 2 valid steps back
+                hist = self.path_history
+                target_idx = max(0, len(hist) - 1 - 2)
+                safe_tiles = game_state.get("safe_tiles") if game_state else None
+                if safe_tiles:
+                    while target_idx > 0 and hist[target_idx] not in safe_tiles:
+                        target_idx -= 1
+                
                 # Flag the visual backtrack tracking state
                 self.is_backtracking = True
                 self.backtrack_timer = 0.20  # Duration (seconds) to pause on hazard tile
-                self.backtrack_target = last_safe_pos
+                self.backtrack_target = hist[target_idx]
 
                 events.append({
                     "type": "penalty",
@@ -178,10 +186,18 @@ class Player:
                 self.score -= PENALTY_BROKEN
                 self.penalty_count["broken"] += 1
                 
+                # Calculate 3 valid steps back
+                hist = self.path_history
+                target_idx = max(0, len(hist) - 1 - 3)
+                safe_tiles = game_state.get("safe_tiles") if game_state else None
+                if safe_tiles:
+                    while target_idx > 0 and hist[target_idx] not in safe_tiles:
+                        target_idx -= 1
+                
                 # Flag the visual backtrack tracking state
                 self.is_backtracking = True
                 self.backtrack_timer = 0.20  # Duration (seconds) to pause on hazard tile
-                self.backtrack_target = last_safe_pos
+                self.backtrack_target = hist[target_idx]
 
                 events.append({
                     "type": "penalty",

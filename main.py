@@ -188,6 +188,7 @@ class Game:
                          "Game started! Deliver cookies to all 3 houses, then find the exit!",
                          "system")
 
+        self.bonus_animations = []
         self.state = self.PLAYING
 
     def _process_events(self, events_list: list):
@@ -204,11 +205,30 @@ class Game:
                 if event.get("log_type") != "ai" and getattr(self, 'sfx_delivery', None):
                     self.sfx_delivery.play()
 
-            # Penatly
+            # Bonus Animation
+            elif event["type"] == "bonus" and event.get("log_type") != "ai":
+                msg = event.get("msg", "").lower()
+                item = "boots" if "boots" in msg else ("rope" if "rope" in msg else "flashlight")
+                self.bonus_animations.append({
+                    "item": item,
+                    "timer": 0.0,
+                    "duration": 1.5
+                })
+
+            # Penalty
             elif event["type"] == "penalty":
                 # We only play damage sounds and shake the screen for the Human player
                 if event.get("log_type") != "ai":
                     msg = event.get("msg", "").lower()
+                    
+                    if "boots broke!" in msg or "rope broke!" in msg or "flashlight battery died" in msg:
+                        item = "boots" if "boots" in msg else ("rope" if "rope" in msg else "flashlight")
+                        self.bonus_animations.append({
+                            "item": item,
+                            "timer": 0.0,
+                            "duration": 1.5,
+                            "type": "destroyed"
+                        })
                     
                     if "puddle" in msg and getattr(self, 'sfx_puddle', None):
                         self.sfx_puddle.play()
@@ -523,8 +543,18 @@ class Game:
         if self.state == self.PLAYING:
             if getattr(self.human, 'flashlight_timer', 0) > 0:
                 self.human.flashlight_timer -= dt
-                if self.human.flashlight_timer < 0:
+                if self.human.flashlight_timer <= 0:
                     self.human.flashlight_timer = 0
+                    self._process_events([{
+                        "type": "penalty",
+                        "msg": "Flashlight battery died, find one nearby!",
+                        "log": "Your flashlight battery died!",
+                        "log_type": "human"
+                    }])
+            
+            for anim in getattr(self, 'bonus_animations', []):
+                anim["timer"] += dt
+            self.bonus_animations = [a for a in getattr(self, 'bonus_animations', []) if a["timer"] < a["duration"]]
 
         if self.state == self.BFS_VIZ:
             if not getattr(self, 'bfs_paused', False):
@@ -677,8 +707,83 @@ class Game:
             hint_font = pygame.font.SysFont("segoeuisymbol", 11)
         except Exception:
             hint_font = pygame.font.Font(None, 13)
-        hint = hint_font.render("Arrow keys or WASD to move", True, Colors.WHITE)
+        hint = hint_font.render("Arrow keys or WASD to move - Watch out for warning signs indicating nearby obstacles!", True, Colors.WHITE)
         self.screen.blit(hint, hint.get_rect(centerx=start_x + GRID_PX // 2, top=grid_y + GRID_PX + 8))
+
+        # Render bonus and destroyed animations
+        if hasattr(self, 'bonus_animations') and self.bonus_animations:
+            for anim in self.bonus_animations:
+                t = anim["timer"]
+                item = anim["item"]
+                anim_type = anim.get("type", "bonus")
+                
+                # The popup is on the right for destroyed, left for bonus
+                start_x, start_y = (WINDOW_WIDTH - 190 if anim_type == "destroyed" else 50), grid_y + 100
+                
+                max_w = min(900, WINDOW_WIDTH - 40)
+                hud_x = (WINDOW_WIDTH - max_w) // 2
+                hud_base_x = hud_x + 190
+                y_offset = 10
+                hud_base_y = y_offset + 18
+                
+                if item == "boots":
+                    target_x, target_y = hud_base_x + 13, hud_base_y + 13
+                elif item == "rope":
+                    target_x, target_y = hud_base_x + 32 + 13, hud_base_y + 13
+                else:
+                    target_x, target_y = hud_base_x + 64 + 13, hud_base_y + 13
+                    
+                if t < 1.0:
+                    rect = pygame.Rect(start_x, start_y, 140, 120)
+                    bg_color = (80, 20, 20) if anim_type == "destroyed" else Colors.DEEP
+                    border_color = (255, 50, 50) if anim_type == "destroyed" else Colors.BORDER
+                    
+                    pygame.draw.rect(self.screen, bg_color, rect, border_radius=10)
+                    pygame.draw.rect(self.screen, border_color, rect, width=2, border_radius=10)
+                    
+                    from ui.assets import assets
+                    sprite = assets.get_scaled(item, (60, 60))
+                    if sprite:
+                        if anim_type == "destroyed":
+                            tinted = sprite.copy()
+                            overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
+                            overlay.fill((255, 0, 0, 150))
+                            tinted.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+                            self.screen.blit(tinted, tinted.get_rect(center=(start_x + 70, start_y + 50)))
+                        else:
+                            self.screen.blit(sprite, sprite.get_rect(center=(start_x + 70, start_y + 50)))
+                    
+                    try:
+                        font = pygame.font.SysFont("segoeuisymbol", 12, bold=True)
+                    except:
+                        font = pygame.font.Font(None, 16)
+                        
+                    if anim_type == "destroyed":
+                        text_str = f"{item.upper()} BROKE!" if item != "flashlight" else "BATTERY DIED!"
+                        text_color = (255, 100, 100)
+                    else:
+                        text_str = f"{item.upper()} ACQUIRED!"
+                        text_color = Colors.GOLD
+                        
+                    text = font.render(text_str, True, text_color)
+                    self.screen.blit(text, text.get_rect(center=(start_x + 70, start_y + 100)))
+                
+                elif t < 1.5:
+                    progress = (t - 1.0) / 0.5
+                    curr_x = start_x + 70 + (target_x - (start_x + 70)) * progress
+                    curr_y = start_y + 50 + (target_y - (start_y + 50)) * progress
+                    
+                    from ui.assets import assets
+                    sprite = assets.get_scaled(item, (40, 40))
+                    if sprite:
+                        if anim_type == "destroyed":
+                            tinted = sprite.copy()
+                            overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
+                            overlay.fill((255, 0, 0, 150))
+                            tinted.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+                            self.screen.blit(tinted, tinted.get_rect(center=(curr_x, curr_y)))
+                        else:
+                            self.screen.blit(sprite, sprite.get_rect(center=(curr_x, curr_y)))
 
         log_y = grid_y + GRID_PX + 30
         self.hud.render_log(self.screen, log_y, max_height=100)
