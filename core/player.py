@@ -33,6 +33,9 @@ class Player:
         self.rope_durability = 0
         self.flashlight_timer = 0.0
         self.known_hazards = set()
+        self.is_backtracking = False
+        self.backtrack_target = None
+        self.backtrack_timer = 0.0
 
         # AI-specific memory
         start_key = f"{start_pos[0]},{start_pos[1]}"
@@ -93,9 +96,10 @@ class Player:
     def move(self, dx: int, dy: int, game_map: list, difficulty: str, game_state) -> list:
         """
         Attempt to move the player by (dx, dy).
-        Returns a list of event dicts for the UI to process.
+        If an obstacle is hit, records safe telemetry and flags a timed visual backtrack.
         """
-        if self.finished:
+        # Block inputs completely if the entity is already currently backing out of a constraint
+        if self.finished or getattr(self, 'is_backtracking', False):
             return []
 
         events = []
@@ -112,11 +116,14 @@ class Player:
         if tile_type == Tile.WALL:
             return []
 
-        # Move
+        # 1. SAVE TELEMETRY: Record exactly where we are standing BEFORE taking the step
+        last_safe_pos = self.pos
+
+        # Move to the new tile
         self.pos = (nx, ny)
         self.path_history.append(self.pos)
 
-        # Reveal tiles
+        # Reveal tiles matrix
         new_visible = self.tiles_in_view(difficulty)
         self.add_revealed_tiles(new_visible)
 
@@ -137,12 +144,18 @@ class Player:
                         "log_type": "penalty" if self.is_human else "ai",
                     })
             else:
+                # ---> CHANGED: Apply penalty stats, but delay the physics change over time
                 self.score -= PENALTY_PUDDLE
                 self.penalty_count["puddle"] += 1
-                self.revert_steps(REVERT_PUDDLE, game_state.get("safe_tiles"))
+                
+                # Flag the visual backtrack tracking state
+                self.is_backtracking = True
+                self.backtrack_timer = 0.20  # Duration (seconds) to pause on hazard tile
+                self.backtrack_target = last_safe_pos
+
                 events.append({
                     "type": "penalty",
-                    "msg": "Puddle! -150pts, pushed back 2 steps",
+                    "msg": "Puddle! -150pts, backtracking...",
                     "log": "You stepped on a puddle! -150pts" if self.is_human else "AI stepped on a puddle! -150pts",
                     "log_type": "penalty" if self.is_human else "ai",
                 })
@@ -161,12 +174,18 @@ class Player:
                         "log_type": "penalty" if self.is_human else "ai",
                     })
             else:
+                # ---> CHANGED: Apply penalty stats, but delay the physics change over time
                 self.score -= PENALTY_BROKEN
                 self.penalty_count["broken"] += 1
-                self.revert_steps(REVERT_BROKEN, game_state.get("safe_tiles"))
+                
+                # Flag the visual backtrack tracking state
+                self.is_backtracking = True
+                self.backtrack_timer = 0.20  # Duration (seconds) to pause on hazard tile
+                self.backtrack_target = last_safe_pos
+
                 events.append({
                     "type": "penalty",
-                    "msg": "Broken road! -200pts, pushed back 3 steps",
+                    "msg": "Broken road! -200pts, backtracking...",
                     "log": "You hit a broken road! -200pts" if self.is_human else "AI hit a broken road! -200pts",
                     "log_type": "penalty" if self.is_human else "ai",
                 })
