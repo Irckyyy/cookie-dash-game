@@ -552,15 +552,31 @@ class Game:
         if hasattr(self, 'human') and getattr(self.human, 'is_backtracking', False):
             self.human.backtrack_timer -= dt
             if self.human.backtrack_timer <= 0:
-                # Timer complete: smoothly move position back to the safe tile
-                self.human.pos = self.human.backtrack_target
-                self.human.is_backtracking = False
-                
-                # Re-reveal the visibility matrix on the safe tile
-                difficulty = self.screen_mgr.selected_difficulty
-                self.human.add_revealed_tiles(self.human.tiles_in_view(difficulty))
-            return  # Freeze regular inputs while backing up
+                # Check if we haven't reached the target safe tile yet
+                if self.human.pos != self.human.backtrack_target and len(self.human.path_history) > 1:
+                    # 1. Step backwards one tile at a time
+                    prev_pos = self.human.path_history.pop() # Remove current hazard/tile
+                    self.human.pos = self.human.path_history[-1] # Move to previous tile
+                    
+                    # 2. Update sprite facing direction to face the way we are moving
+                    dx = self.human.pos[0] - prev_pos[0]
+                    dy = self.human.pos[1] - prev_pos[1]
+                    dir_map = {(0, -1): "up", (0, 1): "down", (-1, 0): "left", (1, 0): "right"}
+                    facing = dir_map.get((dx, dy))
+                    if facing:
+                        self.grid_renderer._human_facing = facing
 
+                    # 3. Set a short timer for the next step back
+                    self.human.backtrack_timer = 0.15 
+                else:
+                    # Reached the safe target tile! End backtracking state.
+                    self.human.is_backtracking = False
+                    
+                    # Re-reveal the visibility matrix on the safe tile
+                    difficulty = self.screen_mgr.selected_difficulty
+                    self.human.add_revealed_tiles(self.human.tiles_in_view(difficulty))
+            return  # Freeze regular inputs while backing up
+        
         # Proper AI Visual Backtracking Transition 
         if hasattr(self, 'ai_player') and getattr(self.ai_player, 'is_backtracking', False):
             self.ai_player.backtrack_timer -= dt

@@ -246,9 +246,17 @@ class GridRenderer:
 
                 # Check flashlight
                 flashlight_active = getattr(player, 'flashlight_timer', 0.0) > 0
+                is_known_hazard = key in getattr(player, 'known_hazards', set())
+
+                if is_human:
+                    reveal_hazard = force_reveal or (is_in_vision and (is_known_hazard or flashlight_active))
+                else:
+                    reveal_hazard = force_reveal or (is_in_vision and flashlight_active)
+
+                flashlight_active = getattr(player, 'flashlight_timer', 0.0) > 0
 
                 # Force reveal if it's explicitly requested (replay) or if flashlight sees it
-                reveal_hazard = force_reveal or (flashlight_active and is_in_vision)
+        
                 is_battery_on_tile = batteries is not None and (x, y) in batteries
 
                 # Draw entity sprite on tile (walls, houses, exits, known hazards)
