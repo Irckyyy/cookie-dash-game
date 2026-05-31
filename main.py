@@ -445,6 +445,9 @@ class Game:
                 if self.review_anim_index > 1:
                     self.review_anim_index -= 1
             return
+        
+        if getattr(self, 'human', None) and getattr(self.human, 'is_backtracking', False):
+            return
 
         if self.state != self.PLAYING or self.game_over:
             return
@@ -491,6 +494,31 @@ class Game:
 
         if self.shake_timer > 0:
             self.shake_timer -= dt
+
+        if hasattr(self, 'human') and getattr(self.human, 'is_backtracking', False):
+            self.human.backtrack_timer -= dt
+            if self.human.backtrack_timer <= 0:
+                # Timer complete: smoothly move position back to the safe tile
+                self.human.pos = self.human.backtrack_target
+                self.human.is_backtracking = False
+                
+                # Re-reveal the visibility matrix on the safe tile
+                difficulty = self.screen_mgr.selected_difficulty
+                self.human.add_revealed_tiles(self.human.tiles_in_view(difficulty))
+            return  # Freeze regular inputs while backing up
+
+        # Proper AI Visual Backtracking Transition 
+        if hasattr(self, 'ai_player') and getattr(self.ai_player, 'is_backtracking', False):
+            self.ai_player.backtrack_timer -= dt
+            if self.ai_player.backtrack_timer <= 0:
+                # Timer complete: smoothly move AI position back to the safe tile
+                self.ai_player.pos = self.ai_player.backtrack_target
+                self.ai_player.is_backtracking = False
+                
+                # Re-reveal AI vision matrix
+                difficulty = self.screen_mgr.selected_difficulty
+                self.ai_player.add_revealed_tiles(self.ai_player.tiles_in_view(difficulty))
+            return  # Freeze AI path steps while it finishes backing up
 
         if self.state == self.PLAYING:
             if getattr(self.human, 'flashlight_timer', 0) > 0:
