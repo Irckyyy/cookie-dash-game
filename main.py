@@ -437,6 +437,40 @@ class Game:
                 self.state = self.DIFFICULTY
                 if getattr(self, 'sfx_click', None):
                     self.sfx_click.play()
+            elif key in (pygame.K_RIGHT, pygame.K_d):
+                if self.current_intro_slide >= 6:
+                    self.story_already_viewed = True
+                    self.state = self.DIFFICULTY
+                else:
+                    self.current_intro_slide += 1
+                if getattr(self, 'sfx_click', None):
+                    self.sfx_click.play()
+            elif key in (pygame.K_LEFT, pygame.K_a):
+                if self.current_intro_slide > 2:
+                    self.current_intro_slide -= 1
+                    if getattr(self, 'sfx_click', None):
+                        self.sfx_click.play()
+            return
+            
+        if self.state == self.DIFFICULTY:
+            from setting import Difficulty
+            diffs = [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]
+            if key in (pygame.K_RIGHT, pygame.K_d):
+                idx = diffs.index(self.screen_mgr.selected_difficulty)
+                idx = (idx + 1) % len(diffs)
+                self.screen_mgr.selected_difficulty = diffs[idx]
+                if getattr(self, 'sfx_click', None):
+                    self.sfx_click.play()
+            elif key in (pygame.K_LEFT, pygame.K_a):
+                idx = diffs.index(self.screen_mgr.selected_difficulty)
+                idx = (idx - 1) % len(diffs)
+                self.screen_mgr.selected_difficulty = diffs[idx]
+                if getattr(self, 'sfx_click', None):
+                    self.sfx_click.play()
+            elif key in (pygame.K_SPACE, pygame.K_RETURN):
+                self.start_game()
+                if getattr(self, 'sfx_click', None):
+                    self.sfx_click.play()
             return
 
         if self.state == self.BFS_VIZ:
