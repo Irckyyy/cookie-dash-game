@@ -55,11 +55,16 @@ class HUD:
         self.log_entries.clear()
 
     def _draw_delivery_dots(self, surface: pygame.Surface, x: int, y: int,
-                            deliveries: int):
-        """Draw 3 delivery indicator dots with cookie sprites."""
+                            deliveries: int, mirrored: bool = False):
+        """Draw 3 delivery indicator dots with cookie sprites. Mirrors right-to-left if specified."""
         cookie_mini = assets.get_scaled("cookie", (18, 18))
         for i in range(DELIVERIES_NEEDED):
-            dot_x = x + i * 24
+            # If mirrored, subtract space to grow right-to-left; otherwise add space to grow left-to-right
+            if mirrored:
+                dot_x = x - i * 24
+            else:
+                dot_x = x + i * 24
+                
             dot_rect = pygame.Rect(dot_x, y, 18, 18)
             if deliveries > i:
                 # Delivered — show mini cookie sprite
@@ -129,22 +134,6 @@ class HUD:
 
         # === Right: AI player ===
         # Delivery dots (right-aligned)
-        self._draw_delivery_dots(surface, hud_x + max_w - 182, y_offset + 22,
-                                 ai.deliveries)
-
-        # Score
-        a_score = self._val_font.render(str(ai.score), True, Colors.PURPLE)
-        a_score_rect = a_score.get_rect(right=hud_x + max_w - 50,
-                                         top=y_offset + 28)
-        surface.blit(a_score, a_score_rect)
-
-        # Label
-        ai_label = self._label_font.render("AI", True, Colors.MUTED)
-        ai_label_rect = ai_label.get_rect(right=hud_x + max_w - 50,
-                                           top=y_offset + 10)
-        surface.blit(ai_label, ai_label_rect)
-
-        # AI icon from icon spritesheet
         ai_icon = assets.get_icon("robot")
         if ai_icon:
             icon_size = 30
@@ -161,8 +150,20 @@ class HUD:
                 tinted.blit(purple_overlay, (0, 0))
                 surface.blit(tinted, icon_rect)
 
-        # Draw AI inventory
-        self._draw_inventory(surface, hud_x + max_w - 256, y_offset + 18, ai)
+        # 2. Label & Score
+        ai_label = self._label_font.render("AI", True, Colors.MUTED)
+        ai_label_rect = ai_label.get_rect(right=hud_x + max_w - 50, top=y_offset + 10)
+        surface.blit(ai_label, ai_label_rect)
+
+        a_score = self._val_font.render(str(ai.score), True, Colors.PURPLE)
+        a_score_rect = a_score.get_rect(right=hud_x + max_w - 50, top=y_offset + 28)
+        surface.blit(a_score, a_score_rect)
+
+        # 3. Delivery dots (CHANGED: Anchored near score card, growing beautifully RIGHT-TO-LEFT)
+        self._draw_delivery_dots(surface, hud_x + max_w - 130, y_offset + 22, ai.deliveries, mirrored=True)
+
+        # 4. AI inventory boxes (Pushed out comfortably to prevent any collisions)
+        self._draw_inventory(surface, hud_x + max_w - 280, y_offset + 18, ai)
 
     def render_log(self, surface: pygame.Surface, y_offset: int, max_height: int = 100):
         """Render the log panel below the grids."""
