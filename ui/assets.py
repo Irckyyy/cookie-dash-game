@@ -8,8 +8,10 @@ the assets/background folder.
 import os
 import pygame
 
+from utils.helper import resource_path
+
 # Base directory for assets (relative to project root)
-_BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+_BASE_DIR = resource_path("assets")
 _TILES_DIR = os.path.join(_BASE_DIR, "tiles")
 _SPRITES_DIR = os.path.join(_BASE_DIR, "sprites")
 _BG_DIR = os.path.join(_BASE_DIR, "background")

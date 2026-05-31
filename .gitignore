@@ -9,6 +9,7 @@ venv/
 .venv/
 env.bak/
 venv.bak/
+dist/
 
 # Project specific ignores
 Cookie-Game-Proposal.pdf
