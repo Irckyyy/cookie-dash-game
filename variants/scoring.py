@@ -24,19 +24,19 @@ def calculate_results(human, ai, elapsed: int, difficulty: str) -> dict:
 
     # Determine winner
     if human.finished and not ai.finished:
-        winner_text = "You Win! 🎉"
-        winner_badge = "🏆"
+        winner_text = "You Win!"
+        winner_badge = ""
     elif not human.finished and ai.finished:
-        winner_text = "AI Wins! 🤖"
-        winner_badge = "🤖"
+        winner_text = "AI Wins!"
+        winner_badge = ""
     else:
         # Both finished — compare PI
         if h_pi >= a_pi:
-            winner_text = "You Win by Score! 🎉"
-            winner_badge = "🏆"
+            winner_text = "You Win by Score!"
+            winner_badge = ""
         else:
             winner_text = "AI Wins by Score!"
-            winner_badge = "🤖"
+            winner_badge = ""
 
     algo_name, algo_desc = ALGORITHM_DESCRIPTIONS.get(difficulty, ("", ""))
 

@@ -89,17 +89,6 @@ class GridRenderer:
         if not is_revealed and not is_player_here:
             return
 
-        if is_player_here:
-            # Draw player sprite
-            facing = self._human_facing if is_human else self._ai_facing
-            sprite = assets.get_player_sprite(facing)
-            if sprite:
-                sprite_rect = sprite.get_rect(center=tile_rect.center)
-                # Shift up slightly so the character "stands" on the tile
-                sprite_rect.y -= int(TILE_SIZE * 0.12)
-                surface.blit(sprite, sprite_rect)
-            return
-
         # Draw tile-specific sprites
         if is_battery:
             if assets.battery:
@@ -141,6 +130,19 @@ class GridRenderer:
             if assets.entrance:
                 sprite_rect = assets.entrance.get_rect(center=tile_rect.center)
                 surface.blit(assets.entrance, sprite_rect)
+
+        if is_player_here:
+            # Draw player sprite
+            facing = self._human_facing if is_human else self._ai_facing
+            if not is_human and assets.get("ai_head"):
+                sprite = assets.get("ai_head")
+            else:
+                sprite = assets.get_player_sprite(facing)
+            if sprite:
+                sprite_rect = sprite.get_rect(center=tile_rect.center)
+                # Shift up slightly so the character "stands" on the tile
+                sprite_rect.y -= int(TILE_SIZE * 0.12)
+                surface.blit(sprite, sprite_rect)
 
     def render(self, surface: pygame.Surface, x_offset: int, y_offset: int,
                player, game_map: list, is_human: bool,
@@ -200,6 +202,11 @@ class GridRenderer:
                 else:
                     self._ai_facing = new_dir
 
+        current_vision_set = set()
+        if difficulty and hasattr(player, 'tiles_in_view'):
+            facing = self._human_facing if is_human else self._ai_facing
+            current_vision_set = player.tiles_in_view(difficulty, facing)
+
         # Draw each tile
         for y in range(SIZE):
             for x in range(SIZE):
@@ -238,11 +245,7 @@ class GridRenderer:
                                      width=1, border_radius=5)
 
                 # Calculate if tile is in current vision radius
-                is_in_vision = False
-                if difficulty:
-                    from setting import DIFFICULTY_CONFIG
-                    r = DIFFICULTY_CONFIG[difficulty]["vision_radius"]
-                    is_in_vision = max(abs(x - player.pos[0]), abs(y - player.pos[1])) <= r
+                is_in_vision = key in current_vision_set
 
                 # Check flashlight
                 flashlight_active = getattr(player, 'flashlight_timer', 0.0) > 0
@@ -252,10 +255,6 @@ class GridRenderer:
                     reveal_hazard = force_reveal or (is_in_vision and (is_known_hazard or flashlight_active))
                 else:
                     reveal_hazard = force_reveal or (is_in_vision and flashlight_active)
-
-                flashlight_active = getattr(player, 'flashlight_timer', 0.0) > 0
-
-                # Force reveal if it's explicitly requested (replay) or if flashlight sees it
         
                 is_battery_on_tile = batteries is not None and (x, y) in batteries
 

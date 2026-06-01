@@ -50,7 +50,7 @@ class Player:
         self.recent_positions = []   # Track last N positions for cycle detection
         self.recent_positions = []   # Track last N positions for cycle detection
 
-    def tiles_in_view(self, difficulty: str) -> set:
+    def tiles_in_view(self, difficulty: str, facing: str = None) -> set:
         """Returns the set of tiles the player can currently see based on difficulty."""
         r = DIFFICULTY_CONFIG[difficulty]["vision_radius"]
         visible = set()
@@ -60,6 +60,19 @@ class Player:
                 x, y = px + dx, py + dy
                 if 0 <= x < SIZE and 0 <= y < SIZE:
                     visible.add(f"{x},{y}")
+                    
+        # Directional vision (Hard mode / Flashlight)
+        if facing:
+            # Base vision always sees 1 tile in front (turns from brown to grass)
+            bx, by = px, py
+            if facing == "up": by -= 1
+            elif facing == "down": by += 1
+            elif facing == "left": bx -= 1
+            elif facing == "right": bx += 1
+            
+            if 0 <= bx < SIZE and 0 <= by < SIZE:
+                visible.add(f"{bx},{by}")
+                    
         return visible
 
     def add_revealed_tiles(self, new_tiles: set):
@@ -124,7 +137,9 @@ class Player:
         self.path_history.append(self.pos)
 
         # Reveal tiles matrix
-        new_visible = self.tiles_in_view(difficulty)
+        dir_map = {(0, -1): "up", (0, 1): "down", (-1, 0): "left", (1, 0): "right"}
+        facing = dir_map.get((dx, dy))
+        new_visible = self.tiles_in_view(difficulty, facing=facing)
         self.add_revealed_tiles(new_visible)
 
         key = f"{nx},{ny}"

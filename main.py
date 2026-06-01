@@ -155,10 +155,12 @@ class Game:
                                  self.houses, self.exit_pos)
 
         # Reveal starting vision for both
-        start_visible = self.human.tiles_in_view(difficulty)
+        self.grid_renderer._human_facing = "down"
+        self.grid_renderer._ai_facing = "down"
+        start_visible = self.human.tiles_in_view(difficulty, facing="down")
         self.human.add_revealed_tiles(start_visible)
         self.ai_player.add_revealed_tiles(
-            self.ai_player.tiles_in_view(difficulty)
+            self.ai_player.tiles_in_view(difficulty, facing="down")
         )
 
         # Spawn batteries (flashlight pickups) on empty safe tiles
@@ -181,12 +183,18 @@ class Game:
         # AI speed from difficulty config
         ai_speed_ms = DIFFICULTY_CONFIG[difficulty]["ai_speed_ms"]
         self._ai_speed = ai_speed_ms / 1000.0
+        
+        self.ai_headstart = 3.5 if difficulty == "hard" else 0.0
+        self.ai_delay = 0.0
+        self.ai_delay_cooldown = 4.5
 
         # Reset HUD log
         self.hud.clear_log()
         self.hud.add_log(format_time(0),
                          "Game started! Deliver cookies to all 3 houses, then find the exit!",
                          "system")
+        if self.ai_headstart > 0:
+            self.hud.add_log(format_time(0), "AI initializing search space... Head start!", "ai")
 
         self.bonus_animations = []
         self.state = self.PLAYING
@@ -248,26 +256,26 @@ class Game:
         h_done = self.human.finished
         a_done = self.ai_player.finished
 
-        if not h_done and not a_done:
+        if not h_done:
+            # If AI finishes first, flag it so the glowing panel appears. Do not end the game.
+            if a_done and not getattr(self, '_ai_finish_logged', False):
+                self._ai_finish_logged = True
             return
 
         if h_done and a_done:
             self._end_game()
             return
 
-        # One finished — start grace period
+        # Player finished — start grace period
         if not self.final_countdown:
             self.final_countdown = True
             self.final_countdown_timer = 0.0
             
             if h_done and getattr(self, 'sfx_win', None):
                 self.sfx_win.play()
-            elif a_done and getattr(self, 'sfx_lose', None):
-                self.sfx_lose.play()
 
-            winner = "You" if h_done else "AI"
             self.hud.add_log(format_time(self.elapsed),
-                             f"{winner} finished! Game ending in 2 seconds...",
+                             "You finished! Game ending in 2 seconds...",
                              "system")
 
     def _end_game(self):
@@ -651,13 +659,46 @@ class Game:
             self.elapsed += 1
 
         # Update AI movement
-        self._ai_timer += dt
-        if self._ai_timer >= self._ai_speed:
-            self._ai_timer -= self._ai_speed
-            difficulty = self.screen_mgr.selected_difficulty
-            game_state = {"elapsed": self.elapsed, "safe_tiles": self.safe_tiles}
-            events = self.ai_agent.step(difficulty, game_state)
-            self._process_events(events)
+        if getattr(self, 'ai_headstart', 0) > 0:
+            self.ai_headstart -= dt
+            if self.ai_headstart <= 0:
+                self.ai_headstart = 0
+                self._process_events([{
+                    "type": "log",
+                    "msg": "AI finished initialization. Pursuit started!",
+                    "log": "AI finished initializing its search tree. Pursuit started!",
+                    "log_type": "ai"
+                }])
+        elif getattr(self, 'ai_delay', 0) > 0:
+            self.ai_delay -= dt
+            if self.ai_delay <= 0:
+                self.ai_delay = 0
+        else:
+            if getattr(self, 'ai_delay_cooldown', 0) > 0:
+                self.ai_delay_cooldown -= dt
+                
+            self._ai_timer += dt
+            if self._ai_timer >= self._ai_speed:
+                self._ai_timer -= self._ai_speed
+                difficulty = self.screen_mgr.selected_difficulty
+                game_state = {"elapsed": self.elapsed, "safe_tiles": self.safe_tiles}
+                events = self.ai_agent.step(difficulty, game_state)
+                self._process_events(events)
+
+                # Simulate Node Expansion processing delay at intersections (every 4.5s max)
+                if not getattr(self.ai_player, 'is_backtracking', False) and not self.ai_player.finished and difficulty == "hard":
+                    if getattr(self, 'ai_delay_cooldown', 0) <= 0:
+                        px, py = self.ai_player.pos
+                        all_neighbors = []
+                        from setting import DIRS, SIZE, Tile
+                        for dx, dy in DIRS:
+                            nx, ny = px + dx, py + dy
+                            if 0 <= nx < SIZE and 0 <= ny < SIZE and self.game_map[ny][nx] != Tile.WALL:
+                                all_neighbors.append((nx, ny))
+                        if len(all_neighbors) > 2:
+                            self.ai_delay = 1.25  # 1.25s processing delay
+                            self.ai_delay_cooldown = 4.5  # reset cooldown
+                            self.hud.add_log(format_time(self.elapsed), "AI calculating heuristic cost...", "ai")
 
         # Grace period countdown
         if self.final_countdown:
@@ -760,15 +801,18 @@ class Game:
         hint = hint_font.render("Arrow keys or WASD to move - Watch out for warning signs indicating nearby obstacles!", True, Colors.WHITE)
         self.screen.blit(hint, hint.get_rect(centerx=start_x + GRID_PX // 2, top=grid_y + GRID_PX + 8))
 
+        # Rendering animations
+
         # Render bonus and destroyed animations
         if hasattr(self, 'bonus_animations') and self.bonus_animations:
             for anim in self.bonus_animations:
                 t = anim["timer"]
                 item = anim["item"]
                 anim_type = anim.get("type", "bonus")
+                is_destroyed = (anim_type == "destroyed")
                 
                 # The popup is on the right for destroyed, left for bonus
-                start_x, start_y = (WINDOW_WIDTH - 190 if anim_type == "destroyed" else 50), grid_y + 100
+                anim_start_x, anim_start_y = (WINDOW_WIDTH - 190 if is_destroyed else 50), grid_y + 100
                 
                 max_w = min(900, WINDOW_WIDTH - 40)
                 hud_x = (WINDOW_WIDTH - max_w) // 2
@@ -782,33 +826,37 @@ class Game:
                     target_x, target_y = hud_base_x + 32 + 13, hud_base_y + 13
                 else:
                     target_x, target_y = hud_base_x + 64 + 13, hud_base_y + 13
-                    
-                if t < 1.0:
-                    rect = pygame.Rect(start_x, start_y, 140, 120)
-                    bg_color = (80, 20, 20) if anim_type == "destroyed" else Colors.DEEP
-                    border_color = (255, 50, 50) if anim_type == "destroyed" else Colors.BORDER
+                
+                show_box = (t < 1.0) if not is_destroyed else (t >= 0.5)
+                show_flight = (t >= 1.0) if not is_destroyed else (t < 0.5)
+                
+                from ui.assets import assets
+                
+                if show_box:
+                    rect = pygame.Rect(anim_start_x, anim_start_y, 140, 120)
+                    bg_color = (80, 20, 20) if is_destroyed else Colors.DEEP
+                    border_color = (255, 50, 50) if is_destroyed else Colors.BORDER
                     
                     pygame.draw.rect(self.screen, bg_color, rect, border_radius=10)
                     pygame.draw.rect(self.screen, border_color, rect, width=2, border_radius=10)
                     
-                    from ui.assets import assets
                     sprite = assets.get_scaled(item, (60, 60))
                     if sprite:
-                        if anim_type == "destroyed":
+                        if is_destroyed:
                             tinted = sprite.copy()
                             overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
                             overlay.fill((255, 0, 0, 150))
                             tinted.blit(overlay, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-                            self.screen.blit(tinted, tinted.get_rect(center=(start_x + 70, start_y + 50)))
+                            self.screen.blit(tinted, tinted.get_rect(center=(anim_start_x + 70, anim_start_y + 50)))
                         else:
-                            self.screen.blit(sprite, sprite.get_rect(center=(start_x + 70, start_y + 50)))
+                            self.screen.blit(sprite, sprite.get_rect(center=(anim_start_x + 70, anim_start_y + 50)))
                     
                     try:
                         font = pygame.font.SysFont("segoeuisymbol", 12, bold=True)
                     except:
                         font = pygame.font.Font(None, 16)
                         
-                    if anim_type == "destroyed":
+                    if is_destroyed:
                         text_str = f"{item.upper()} BROKE!" if item != "flashlight" else "BATTERY DIED!"
                         text_color = (255, 100, 100)
                     else:
@@ -816,17 +864,21 @@ class Game:
                         text_color = Colors.GOLD
                         
                     text = font.render(text_str, True, text_color)
-                    self.screen.blit(text, text.get_rect(center=(start_x + 70, start_y + 100)))
+                    self.screen.blit(text, text.get_rect(center=(anim_start_x + 70, anim_start_y + 100)))
                 
-                elif t < 1.5:
-                    progress = (t - 1.0) / 0.5
-                    curr_x = start_x + 70 + (target_x - (start_x + 70)) * progress
-                    curr_y = start_y + 50 + (target_y - (start_y + 50)) * progress
+                if show_flight:
+                    if is_destroyed:
+                        progress = t / 0.5
+                        curr_x = target_x + (anim_start_x + 70 - target_x) * progress
+                        curr_y = target_y + (anim_start_y + 50 - target_y) * progress
+                    else:
+                        progress = (t - 1.0) / 0.5
+                        curr_x = anim_start_x + 70 + (target_x - (anim_start_x + 70)) * progress
+                        curr_y = anim_start_y + 50 + (target_y - (anim_start_y + 50)) * progress
                     
-                    from ui.assets import assets
                     sprite = assets.get_scaled(item, (40, 40))
                     if sprite:
-                        if anim_type == "destroyed":
+                        if is_destroyed:
                             tinted = sprite.copy()
                             overlay = pygame.Surface(tinted.get_size(), pygame.SRCALPHA)
                             overlay.fill((255, 0, 0, 150))
@@ -834,6 +886,46 @@ class Game:
                             self.screen.blit(tinted, tinted.get_rect(center=(curr_x, curr_y)))
                         else:
                             self.screen.blit(sprite, sprite.get_rect(center=(curr_x, curr_y)))
+
+        if getattr(self, '_ai_finish_logged', False) and not getattr(self, 'game_over', False):
+            import math
+            import time
+            pulse = (math.sin(time.time() * 6) + 1) / 2  # 0.0 to 1.0
+            
+            box_w, box_h = 320, 120
+            grid_right = start_x + GRID_PX
+            box_x = grid_right + 30
+            box_y = grid_y + (GRID_PX - box_h) // 2
+            
+            panel_rect = pygame.Rect(box_x, box_y, box_w, box_h)
+            
+            # Glow effect
+            glow_offset = int(15 * pulse)
+            glow_rect = panel_rect.inflate(glow_offset * 2, glow_offset * 2)
+            glow_surf = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(glow_surf, (255, 50, 50, int(80 * pulse)), glow_surf.get_rect(), border_radius=15)
+            self.screen.blit(glow_surf, glow_rect)
+            
+            pygame.draw.rect(self.screen, (30, 10, 20), panel_rect, border_radius=10)
+            pygame.draw.rect(self.screen, (220, 50, 50), panel_rect, width=2, border_radius=10)
+            
+            try:
+                from utils.helper import resource_path
+                font_path = resource_path("assets/fonts/PressStart2P-Regular.ttf")
+                alert_font = pygame.font.Font(font_path, 14)
+                desc_font = pygame.font.Font(font_path, 9)
+            except Exception:
+                alert_font = pygame.font.SysFont("segoeuisymbol", 18, bold=True)
+                desc_font = pygame.font.SysFont("segoeuisymbol", 13)
+                
+            line1 = alert_font.render("AI finished!", True, Colors.RED)
+            self.screen.blit(line1, line1.get_rect(centerx=panel_rect.centerx, top=panel_rect.top + 20))
+            
+            line2 = desc_font.render("Keep going,", True, Colors.WHITE)
+            self.screen.blit(line2, line2.get_rect(centerx=panel_rect.centerx, top=panel_rect.top + 50))
+            
+            line3 = desc_font.render("your PI score still matters!", True, Colors.WHITE)
+            self.screen.blit(line3, line3.get_rect(centerx=panel_rect.centerx, top=panel_rect.top + 70))
 
         log_y = grid_y + GRID_PX + 30
         self.hud.render_log(self.screen, log_y, max_height=100)

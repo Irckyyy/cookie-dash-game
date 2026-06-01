@@ -1,6 +1,13 @@
 """
-core/ai.py — AI agent with difficulty-based strategies.
-Two-mode architecture: Normal greedy exploration + BFS fallback when stuck.
+core/ai.py — AI agent with difficulty-based navigation strategies.
+
+Three clearly separated algorithms based on difficulty:
+  - Easy   : Stochastic Search with Memory Decay
+  - Medium : Deterministic Greedy Search with Persistent Pruning
+  - Hard   : Lookahead DFS with Predictive Pruning
+
+All three share a BFS fallback when the agent gets stuck,
+and a BFS map validation utility used during map generation.
 """
 
 import random
@@ -17,9 +24,11 @@ class AIAgent:
         self.game_map = game_map
         self.houses = houses
         self.exit_pos = exit_pos
-        self._bfs_path = []          # Pre-computed BFS path to follow
+        self._bfs_path = []          # Pre-computed BFS path when agent is stuck
         self._no_progress_count = 0  # Steps without getting closer to goal
-        self._best_dist = None       # Best distance achieved to current goal
+        self._best_dist = None       # Best Manhattan distance achieved to current goal
+        self._prev_target = None
+        self._failsafe_cooldown = 0
         self.replay_log = [{
             'pos': player.pos,
             'reason': 'Started at spawn.',
@@ -31,7 +40,12 @@ class AIAgent:
             'state': 'Started'
         }]
 
+    # =========================================================================
+    # GOAL MANAGEMENT
+    # =========================================================================
+
     def get_goals(self) -> list:
+        """Return remaining delivery targets, sorted by proximity."""
         ai = self.player
         goals = []
         for h in self.houses:
@@ -41,11 +55,15 @@ class AIAgent:
         if not goals:
             goals.append(self.exit_pos)
         else:
-            # Sort remaining houses by distance to current position to avoid skipping nearby ones
             goals.sort(key=lambda h: manhattan(ai.pos, h))
         return goals
 
-    def _get_all_neighbors(self, px, py):
+    # =========================================================================
+    # SHARED UTILITIES
+    # =========================================================================
+
+    def _get_all_neighbors(self, px, py) -> list:
+        """Return all walkable neighbors of (px, py)."""
         neighbors = []
         for dx, dy in DIRS:
             nx, ny = px + dx, py + dy
@@ -53,16 +71,195 @@ class AIAgent:
                 neighbors.append((nx, ny))
         return neighbors
 
-    def _bfs_path_to(self, start, target):
-        """BFS from start to target. Returns full path (list of positions).
-        Tries safe path first (avoids hazards), falls back to any path."""
+    def _filter_known_hazards(self, neighbors) -> list:
+        """Remove tiles the AI already knows are hazards."""
+        ai = self.player
+        known = getattr(ai, 'known_hazards', set())
+        safe = [n for n in neighbors if f"{n[0]},{n[1]}" not in known]
+        return safe if safe else neighbors
+
+    def _prefer_unvisited(self, candidates) -> list:
+        """Sort candidates: unvisited tiles first, then by insertion order."""
+        ai = self.player
+        unvisited = [n for n in candidates if f"{n[0]},{n[1]}" not in ai.memory_visited]
+        return unvisited if unvisited else candidates
+
+    def _avoid_last_pos(self, candidates) -> list:
+        """Prefer not backtracking to the immediately previous position."""
+        ai = self.player
+        if not ai.last_pos:
+            return candidates
+        last_key = f"{ai.last_pos[0]},{ai.last_pos[1]}"
+        forward = [n for n in candidates if f"{n[0]},{n[1]}" != last_key]
+        return forward if forward else candidates
+
+    # =========================================================================
+    # ALGORITHM 1 — EASY: Stochastic Search with Memory Decay
+    # =========================================================================
+    # The AI has a 30% chance each step of ignoring the heuristic and picking
+    # a random neighbor. It also forgets known hazard locations every 10 steps
+    # (memory decay), causing it to potentially repeat past mistakes.
+    # This simulates an inexperienced, forgetful navigator.
+    # =========================================================================
+
+    def _stochastic_search(self, target, all_neighbors) -> tuple:
+        """
+        Easy difficulty algorithm.
+        Stochastic Search: 30% random move + periodic memory decay.
+        """
+        ai = self.player
+        px, py = ai.pos
+
+        neighbors = self._filter_known_hazards(all_neighbors)
+        available = [n for n in neighbors if f"{n[0]},{n[1]}" not in ai.memory_pruned]
+        if not available:
+            ai.memory_pruned.clear()
+            available = neighbors
+
+        # --- Memory Decay ---
+        # Every 10 steps, forget known hazard positions.
+        # The AI may walk into the same puddle or hole again.
+        if ai.step_timer % 10 == 0:
+            ai.memory_pruned.clear()
+
+        # --- Stochastic Step ---
+        # 30% chance: ignore the heuristic, pick a random neighbor.
+        if random.random() < 0.3:
+            chosen = random.choice(available)
+            return chosen, "Stochastic: randomly picked a neighbor (30% chance)."
+
+        # Otherwise: greedy toward target, prefer unvisited
+        sorted_n = sorted(available, key=lambda n: manhattan(n, target))
+        candidates = self._avoid_last_pos(sorted_n)
+        candidates = self._prefer_unvisited(candidates)
+
+        if candidates:
+            chosen = candidates[0]
+            return chosen, "Stochastic: greedy step toward goal."
+
+        # Fallback
+        chosen = sorted(all_neighbors, key=lambda n: manhattan(n, target))[0]
+        return chosen, "Stochastic: fallback to closest neighbor."
+
+    # =========================================================================
+    # ALGORITHM 2 — MEDIUM: Deterministic Greedy Search
+    # =========================================================================
+    # The AI always picks the neighbor with the lowest Manhattan distance to
+    # the target — no randomness. Once a tile is pruned (found to be a hazard
+    # or a dead end), it is permanently blocked for the rest of the match.
+    # This simulates a consistent, memory-persistent navigator.
+    # =========================================================================
+
+    def _deterministic_greedy(self, target, all_neighbors) -> tuple:
+        """
+        Medium difficulty algorithm.
+        Deterministic Greedy Search with Persistent Pruning.
+        Manhattan distance heuristic: h(n) = |x1-x2| + |y1-y2|
+        """
+        ai = self.player
+        px, py = ai.pos
+
+        neighbors = self._filter_known_hazards(all_neighbors)
+
+        # --- Persistent Pruning ---
+        # Pruned tiles are NEVER cleared mid-game for Medium difficulty.
+        # Once a hazard or dead end is discovered, it stays blocked.
+        available = [n for n in neighbors if f"{n[0]},{n[1]}" not in ai.memory_pruned]
+        if not available:
+            # All safe neighbors are pruned — only then do we fall back
+            available = neighbors
+
+        # --- Deterministic Greedy Step ---
+        # Sort strictly by Manhattan distance. No randomness.
+        sorted_n = sorted(available, key=lambda n: manhattan(n, target))
+        candidates = self._avoid_last_pos(sorted_n)
+        candidates = self._prefer_unvisited(candidates)
+
+        if candidates:
+            chosen = candidates[0]
+            h_n = manhattan(chosen, target)
+            return chosen, f"Greedy: picked tile with h(n)={h_n} (Manhattan distance)."
+
+        # All candidates visited — mark current tile as pruned and backtrack
+        ai.memory_pruned.add(f"{px},{py}")
+        chosen = sorted_n[0]
+        return chosen, "Greedy: backtracking — all neighbors visited, current tile pruned."
+
+    # =========================================================================
+    # ALGORITHM 3 — HARD: Lookahead DFS with Predictive Pruning
+    # =========================================================================
+    # Before moving to any tile, the AI scans its neighbors for hazards.
+    # If a hazard is detected in the immediate surroundings, the tile is pruned
+    # BEFORE the AI steps on it — no penalty incurred. This simulates a highly
+    # cautious navigator that avoids danger proactively rather than reactively.
+    # =========================================================================
+
+    def _lookahead_dfs(self, target, all_neighbors) -> tuple:
+        """
+        Hard difficulty algorithm.
+        Lookahead DFS with Predictive Pruning.
+        Scans neighbors of neighbors to detect hazards before stepping.
+        """
+        ai = self.player
+        px, py = ai.pos
+
+        neighbors = self._filter_known_hazards(all_neighbors)
+        available = [n for n in neighbors if f"{n[0]},{n[1]}" not in ai.memory_pruned]
+        if not available:
+            ai.memory_pruned.clear()
+            available = neighbors
+
+        # --- Predictive Pruning (Lookahead) ---
+        # Before committing to a tile, scan its tile type directly.
+        # If it is a hazard, prune it preemptively without stepping on it.
+        safe_from_lookahead = []
+        for n in available:
+            nx, ny = n
+            tile = self.game_map[ny][nx]
+            if tile in (Tile.PUDDLE, Tile.BROKEN):
+                # Detected hazard ahead — prune without penalty
+                ai.memory_pruned.add(f"{nx},{ny}")
+                ai.known_hazards.add(f"{nx},{ny}")
+            else:
+                safe_from_lookahead.append(n)
+
+        candidates = safe_from_lookahead if safe_from_lookahead else available
+
+        # --- DFS-style: prefer unvisited, greedy toward target ---
+        sorted_n = sorted(candidates, key=lambda n: manhattan(n, target))
+        candidates = self._avoid_last_pos(sorted_n)
+        candidates = self._prefer_unvisited(candidates)
+
+        if candidates:
+            chosen = candidates[0]
+            h_n = manhattan(chosen, target)
+            return chosen, f"Lookahead DFS: predictive pruning applied, h(n)={h_n}."
+
+        # Fallback if all neighbors are hazards or pruned
+        chosen = sorted(all_neighbors, key=lambda n: manhattan(n, target))[0]
+        return chosen, "Lookahead DFS: all safe tiles exhausted, forced move."
+
+    # =========================================================================
+    # BFS FALLBACK — used by all difficulty modes when stuck
+    # =========================================================================
+    # When the AI makes no progress toward its goal for too many steps,
+    # it switches to BFS to guarantee it finds a path if one exists.
+    # BFS has full map knowledge here — it is a recovery mechanism, not
+    # the primary navigation strategy.
+    # =========================================================================
+
+    def _bfs_path_to(self, start, target) -> list:
+        """
+        BFS from start to target.
+        Tries a hazard-avoiding path first; falls back to any valid path.
+        Returns list of positions (excluding start).
+        """
         ai = self.player
         hazards = set()
         if not ai.has_boots:
             hazards.add(Tile.PUDDLE)
         if not ai.has_rope:
             hazards.add(Tile.BROKEN)
-
         known = getattr(ai, 'known_hazards', set())
 
         for avoid_hazards in [True, False]:
@@ -71,116 +268,53 @@ class AIAgent:
             while queue:
                 pos, path = queue.popleft()
                 if pos == target:
-                    return path[1:]  # Exclude start position
+                    return path[1:]
                 for dx, dy in DIRS:
                     nx, ny = pos[0] + dx, pos[1] + dy
                     if 0 <= nx < SIZE and 0 <= ny < SIZE and (nx, ny) not in visited:
                         tile = self.game_map[ny][nx]
                         if tile == Tile.WALL:
                             continue
-
-                        if avoid_hazards:
-                            if f"{nx},{ny}" in known or tile in hazards:
-                                continue
-
+                        if avoid_hazards and (f"{nx},{ny}" in known or tile in hazards):
+                            continue
                         visited.add((nx, ny))
                         queue.append(((nx, ny), path + [(nx, ny)]))
         return []
 
-    def _greedy_step(self, difficulty, target, all_neighbors):
-        """Normal greedy exploration. Returns (chosen_pos, reason)."""
-        ai = self.player
-        px, py = ai.pos
-        neighbors = list(all_neighbors)
-
-        # Hard mode: avoid hazards if possible
-        if difficulty == Difficulty.HARD:
-            safe = [n for n in neighbors
-                    if self.game_map[n[1]][n[0]] not in (Tile.PUDDLE, Tile.BROKEN)]
-            if safe:
-                neighbors = safe
-
-        known = getattr(ai, 'known_hazards', set())
-        available = [n for n in neighbors if f"{n[0]},{n[1]}" not in ai.memory_pruned and f"{n[0]},{n[1]}" not in known]
-
-        if not available:
-            ai.memory_pruned.clear()
-            # Try again, but STILL avoid permanent hazards
-            available = [n for n in neighbors if f"{n[0]},{n[1]}" not in known]
-            if not available:
-                available = neighbors
-        neighbors = available
-
-        # Sort by distance to target
-        sorted_n = sorted(neighbors, key=lambda n: manhattan(n, target))
-
-        reason = ""
-
-        if difficulty == Difficulty.EASY and random.random() < 0.3 and neighbors:
-            chosen = random.choice(neighbors)
-            reason = "Stochastic behavior: randomly picked neighbor."
-            return chosen, reason
-
-        # Prefer not going back to last position
-        last_key = f"{ai.last_pos[0]},{ai.last_pos[1]}" if ai.last_pos else None
-        not_last = [n for n in sorted_n if f"{n[0]},{n[1]}" != last_key]
-        candidates = not_last if not_last else sorted_n
-
-        # Prefer unvisited tiles
-        unvisited = [n for n in candidates if f"{n[0]},{n[1]}" not in ai.memory_visited]
-        if unvisited:
-            chosen = unvisited[0]
-            if not reason:
-                reason = "Moved to closest unvisited tile toward goal."
-        elif candidates:
-            chosen = candidates[0]
-            ai.memory_pruned.add(f"{px},{py}")
-            if not reason:
-                reason = "All neighbors visited. Backtracking toward goal."
-        else:
-            sorted_n = sorted(all_neighbors, key=lambda n: manhattan(n, target))
-            chosen = sorted_n[0]
-            if not reason:
-                reason = "Fallback: moved toward goal."
-
-        return chosen, reason
+    # =========================================================================
+    # MAIN STEP — called every AI tick
+    # =========================================================================
 
     def step(self, difficulty: str, game_state: dict) -> list:
         ai = self.player
         if ai.finished:
             return []
-        
+
         if not hasattr(ai, 'known_hazards'):
             ai.known_hazards = set()
 
+        # --- Determine current goal ---
         goals = self.get_goals()
-        prev = getattr(self, '_prev_target', None)
-        if prev in goals:
-            target = prev
-        else:
-            target = goals[0] # Pick the closest house to start
-        
-        # If the target changed (because we just delivered a cookie to the old one)
+        prev = self._prev_target
+        target = prev if prev in goals else goals[0]
+
+        # Reset memory when target changes (new delivery made)
         if prev != target:
             self._best_dist = None
             self._no_progress_count = 0
             self._bfs_path.clear()
             ai.memory_visited.clear()
             ai.memory_pruned.clear()
-            
             self._prev_target = target
 
         ai.step_timer += 1
-        if difficulty == Difficulty.EASY and ai.step_timer % 10 == 0:
-            ai.memory_pruned.clear()
-
         px, py = ai.pos
         all_neighbors = self._get_all_neighbors(px, py)
 
         if not all_neighbors:
             return []
 
-        # Track progress toward the goal
+        # --- Track progress toward goal ---
         current_dist = manhattan(ai.pos, target)
         if self._best_dist is None or current_dist < self._best_dist:
             self._best_dist = current_dist
@@ -188,39 +322,29 @@ class AIAgent:
         else:
             self._no_progress_count += 1
 
-        # Decide: use greedy exploration or BFS fallback
-        # Easy mode triggers BFS sooner since randomness causes more wandering
+        # --- Choose: BFS fallback or difficulty algorithm ---
         bfs_threshold = 15 if difficulty == Difficulty.EASY else 20
         use_bfs = self._no_progress_count >= bfs_threshold
 
         if use_bfs or self._bfs_path:
-            # Compute or follow BFS path
             if not self._bfs_path:
                 self._bfs_path = self._bfs_path_to(ai.pos, target)
-
             if self._bfs_path:
                 chosen = self._bfs_path.pop(0)
-                # Validate the BFS step is still reachable
                 if chosen not in all_neighbors:
-                    # Path got invalidated (revert?), recompute
                     self._bfs_path = self._bfs_path_to(ai.pos, target)
                     if self._bfs_path:
                         chosen = self._bfs_path.pop(0)
                     else:
-                        chosen, reason = self._greedy_step(difficulty, target, all_neighbors)
-                        reason = "BFS failed, greedy fallback."
-                    reason = "Following BFS path toward goal."
-                else:
-                    reason = "Following BFS path toward goal."
+                        chosen, _ = self._route(difficulty, target, all_neighbors)
+                reason = "BFS fallback: following guaranteed path to goal."
             else:
-                # BFS couldn't find a path — use greedy
-                chosen, reason = self._greedy_step(difficulty, target, all_neighbors)
-                reason = "No BFS path found, using greedy."
+                chosen, reason = self._route(difficulty, target, all_neighbors)
+                reason = "BFS fallback failed — reverting to primary algorithm."
         else:
-            # Normal greedy exploration
-            chosen, reason = self._greedy_step(difficulty, target, all_neighbors)
+            chosen, reason = self._route(difficulty, target, all_neighbors)
 
-            # Track stuck counter for visited tiles
+            # Stuck detection — force BFS if revisiting too often
             chosen_key = f"{chosen[0]},{chosen[1]}"
             if chosen_key in ai.memory_visited:
                 ai.stuck_counter += 1
@@ -229,43 +353,35 @@ class AIAgent:
                     ai.memory_pruned.clear()
                     ai.memory_visited.clear()
                     ai.stuck_counter = 0
-                    # Force BFS on next step
                     self._no_progress_count = 999
-                    reason = "Stuck! Will use BFS next step."
+                    reason = "Stuck detected — forcing BFS on next step."
             else:
                 ai.stuck_counter = 0
 
-        # Handle failsafe cooldown
-        if getattr(self, '_failsafe_cooldown', 0) > 0:
+        # --- Anti-oscillation failsafe ---
+        if self._failsafe_cooldown > 0:
             self._failsafe_cooldown -= 1
-
-        # Anti-oscillation failsafe (uses replay_log because path_history truncates on hazards)
         elif len(self.replay_log) >= 8:
             recent_positions = [entry['pos'] for entry in self.replay_log[-8:]]
             if len(set(recent_positions)) <= 4:
-                # The AI has been bouncing in a small loop for 8 steps.
-                # Force a random move to break the loop!
                 unvisited = [n for n in all_neighbors if n not in set(recent_positions)]
-                if unvisited:
-                    chosen = random.choice(unvisited)
-                else:
-                    chosen = random.choice(all_neighbors)
+                chosen = random.choice(unvisited) if unvisited else random.choice(all_neighbors)
                 ai.memory_pruned.clear()
                 ai.memory_visited.clear()
                 self._bfs_path.clear()
-                self._no_progress_count = 999  # Force BFS after jumping out
-                self._failsafe_cooldown = 8    # Don't trigger failsafe again for 8 steps!
-                reason = "Failsafe: Broke out of oscillation loop."
+                self._no_progress_count = 999
+                self._failsafe_cooldown = 8
+                reason = "Failsafe: broke out of oscillation loop."
 
+        # --- Execute move ---
         nx, ny = chosen
         tile_type = self.game_map[ny][nx]
-
-        # Record state
         chosen_key = f"{nx},{ny}"
         was_visited = chosen_key in ai.memory_visited
-        state_str = "BFS Path" if use_bfs or self._bfs_path else ("Backtracking" if was_visited else "Exploring")
+        state_str = "BFS Fallback" if (use_bfs or self._bfs_path) else (
+            "Backtracking" if was_visited else "Exploring"
+        )
 
-        # Update position and memory
         ai.last_pos = ai.pos
         ai.pos = (nx, ny)
         ai.path_history.append(ai.pos)
@@ -285,8 +401,9 @@ class AIAgent:
             'state': state_str
         })
 
-        key = f"{nx},{ny}"
+        # --- Handle tile events ---
         events = []
+        key = f"{nx},{ny}"
 
         if tile_type == Tile.PUDDLE:
             ai.known_hazards.add(key)
@@ -294,17 +411,12 @@ class AIAgent:
                 ai.boots_durability -= 1
                 if ai.boots_durability <= 0:
                     ai.boots_durability = 0
-                    events.append({
-                        "type": "penalty",
-                        "msg": "AI's boots broke!",
-                        "log": "AI's boots broke!",
-                        "log_type": "ai",
-                    })
+                    events.append({"type": "penalty", "msg": "AI's boots broke!", "log": "AI's boots broke!", "log_type": "ai"})
             else:
                 ai.score -= 150
                 ai.penalty_count["puddle"] += 1
                 ai.memory_pruned.add(key)
-                self._bfs_path.clear()  # Invalidate BFS path after revert
+                self._bfs_path.clear()
                 ai.revert_steps(2, game_state.get("safe_tiles"))
                 self.replay_log.append({
                     'pos': ai.pos,
@@ -316,12 +428,7 @@ class AIAgent:
                     'stuck_counter': ai.stuck_counter,
                     'state': 'Penalty (Puddle)'
                 })
-                events.append({
-                    "type": "penalty",
-                    "msg": "AI puddle! -150pts",
-                    "log": "AI stepped on a puddle! -150pts",
-                    "log_type": "ai",
-                })
+                events.append({"type": "penalty", "msg": "AI puddle! -150pts", "log": "AI stepped on a puddle! -150pts", "log_type": "ai"})
 
         elif tile_type == Tile.BROKEN:
             ai.known_hazards.add(key)
@@ -329,17 +436,12 @@ class AIAgent:
                 ai.rope_durability -= 1
                 if ai.rope_durability <= 0:
                     ai.rope_durability = 0
-                    events.append({
-                        "type": "penalty",
-                        "msg": "AI's rope broke!",
-                        "log": "AI's rope broke!",
-                        "log_type": "ai",
-                    })
+                    events.append({"type": "penalty", "msg": "AI's rope broke!", "log": "AI's rope broke!", "log_type": "ai"})
             else:
                 ai.score -= 200
                 ai.penalty_count["broken"] += 1
                 ai.memory_pruned.add(key)
-                self._bfs_path.clear()  # Invalidate BFS path after revert
+                self._bfs_path.clear()
                 ai.revert_steps(3, game_state.get("safe_tiles"))
                 self.replay_log.append({
                     'pos': ai.pos,
@@ -351,14 +453,9 @@ class AIAgent:
                     'stuck_counter': ai.stuck_counter,
                     'state': 'Penalty (Broken Road)'
                 })
-                events.append({
-                    "type": "penalty",
-                    "msg": "AI broken road! -200pts",
-                    "log": "AI hit a broken road! -200pts",
-                    "log_type": "ai",
-                })
+                events.append({"type": "penalty", "msg": "AI broken road! -200pts", "log": "AI hit a broken road! -200pts", "log_type": "ai"})
 
-        # After penalty/revert, update progress tracking
+        # Update progress after any revert
         new_dist = manhattan(ai.pos, target)
         if new_dist < self._best_dist:
             self._best_dist = new_dist
@@ -368,44 +465,36 @@ class AIAgent:
             ai.delivered_houses.add(key)
             ai.deliveries += 1
             ai.score += 800
-            # Reset progress tracking for new goal
             self._best_dist = None
             self._no_progress_count = 0
             self._bfs_path.clear()
             ai.memory_visited.clear()
             ai.memory_pruned.clear()
-            events.append({
-                "type": "delivery",
-                "msg": f"AI delivered! ({ai.deliveries}/3)",
-                "log": f"AI delivered cookie! +800pts ({ai.deliveries}/3)",
-                "log_type": "ai",
-            })
+            events.append({"type": "delivery", "msg": f"AI delivered! ({ai.deliveries}/3)", "log": f"AI delivered cookie! +800pts ({ai.deliveries}/3)", "log_type": "ai"})
             item = random.choice(["boots", "rope"])
             if item == "boots":
                 ai.boots_durability = DIFFICULTY_CONFIG[difficulty]["boots_durability"]
-                events.append({
-                    "type": "bonus",
-                    "msg": "Got Boots! Puddles protected!",
-                    "log": "AI received Boots!",
-                    "log_type": "ai",
-                })
-            elif item == "rope":
+                events.append({"type": "bonus", "msg": "Got Boots! Puddles protected!", "log": "AI received Boots!", "log_type": "ai"})
+            else:
                 ai.rope_durability = DIFFICULTY_CONFIG[difficulty]["rope_durability"]
-                events.append({
-                    "type": "bonus",
-                    "msg": "Got Rope! Roads protected!",
-                    "log": "AI received Rope!",
-                    "log_type": "ai",
-                })
+                events.append({"type": "bonus", "msg": "Got Rope! Roads protected!", "log": "AI received Rope!", "log_type": "ai"})
 
         if tile_type == Tile.EXIT and ai.deliveries >= 3 and not ai.finished:
             ai.finished = True
             ai.finish_time = game_state.get("elapsed", 0)
-            events.append({
-                "type": "finish",
-                "msg": "AI exited the village!",
-                "log": "AI exited the village!",
-                "log_type": "ai",
-            })
+            events.append({"type": "finish", "msg": "AI exited the village!", "log": "AI exited the village!", "log_type": "ai"})
 
         return events
+
+    # =========================================================================
+    # INTERNAL ROUTER — dispatches to the correct algorithm by difficulty
+    # =========================================================================
+
+    def _route(self, difficulty, target, all_neighbors) -> tuple:
+        """Dispatch to the correct algorithm based on difficulty."""
+        if difficulty == Difficulty.EASY:
+            return self._stochastic_search(target, all_neighbors)
+        elif difficulty == Difficulty.MEDIUM:
+            return self._deterministic_greedy(target, all_neighbors)
+        else:
+            return self._lookahead_dfs(target, all_neighbors)

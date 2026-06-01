@@ -335,7 +335,7 @@ class ScreenManager:
             ("Lead Artist & Asset Curation:", (150, 200, 255)),
             ("Clarissa May Alejandro", Colors.WHITE),
             ("", Colors.WHITE),
-            ("Game Concept, QA & Testing:", (150, 200, 255)),
+            ("Lead QA & Game Design:", (150, 200, 255)),
             ("Krisdel Ybañez", Colors.WHITE),
             ("", Colors.WHITE),
             ("Intro to Artificial Intelligence", (210, 190, 150)),

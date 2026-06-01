@@ -259,6 +259,12 @@ class AssetLoader:
             if os.path.exists(path):
                 img = self._load_image(path)
                 self._cache[f"cred_{char}"] = pygame.transform.smoothscale(img, (120, 120))
+                
+        # Load AI robot head
+        ai_head_path = os.path.join(credits_dir, "robot_head.png")
+        if os.path.exists(ai_head_path):
+            raw = self._load_image(ai_head_path)
+            self._cache["ai_head"] = self._scale(raw, int(tile_size * 1.1))
 
         path = os.path.join(_SPRITES_DIR, "delivery_man.png")
         if not os.path.exists(path):
